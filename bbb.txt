@@ -1,0 +1,102 @@
+LOCUS       XP_001351225             232 aa            linear   INV 28-MAR-2018
+DEFINITION  mitochondrial ribosomal protein L29/L47 precursor, putative
+            [Plasmodium falciparum 3D7].
+ACCESSION   XP_001351225
+VERSION     XP_001351225.1
+DBLINK      BioProject: PRJNA148
+            BioSample: SAMN00102897
+DBSOURCE    REFSEQ: accession XM_001351189.1
+KEYWORDS    RefSeq.
+SOURCE      Plasmodium falciparum 3D7
+  ORGANISM  Plasmodium falciparum 3D7
+            Eukaryota; Alveolata; Apicomplexa; Aconoidasida; Haemosporida;
+            Plasmodiidae; Plasmodium; Plasmodium (Laverania).
+REFERENCE   1
+  AUTHORS   Hall,N., Pain,A., Berriman,M., Churcher,C., Harris,B., Harris,D.,
+            Mungall,K., Bowman,S., Atkin,R., Baker,S., Barron,A., Brooks,K.,
+            Buckee,C.O., Burrows,C., Cherevach,I., Chillingworth,C.,
+            Chillingworth,T., Christodoulou,Z., Clark,L., Clark,R., Corton,C.,
+            Cronin,A., Davies,R., Davis,P., Dear,P., Dearden,F., Doggett,J.,
+            Feltwell,T., Goble,A., Goodhead,I., Gwilliam,R., Hamlin,N.,
+            Hance,Z., Harper,D., Hauser,H., Hornsby,T., Holroyd,S.,
+            Horrocks,P., Humphray,S., Jagels,K., James,K.D., Johnson,D.,
+            Kerhornou,A., Knights,A., Konfortov,B., Kyes,S., Larke,N.,
+            Lawson,D., Lennard,N., Line,A., Maddison,M., McLean,J., Mooney,P.,
+            Moule,S., Murphy,L., Oliver,K., Ormond,D., Price,C., Quail,M.A.,
+            Rabbinowitsch,E., Rajandream,M.A., Rutter,S., Rutherford,K.M.,
+            Sanders,M., Simmonds,M., Seeger,K., Sharp,S., Smith,R., Squares,R.,
+            Squares,S., Stevens,K., Taylor,K., Tivey,A., Unwin,L.,
+            Whitehead,S., Woodward,J., Sulston,J.E., Craig,A., Newbold,C. and
+            Barrell,B.G.
+  TITLE     Sequence of Plasmodium falciparum chromosomes 1, 3-9 and 13
+  JOURNAL   Nature 419 (6906), 527-531 (2002)
+   PUBMED   12368867
+REFERENCE   2  (residues 1 to 232)
+  AUTHORS   Bowman,S., Lawson,D., Basham,D., Brown,D., Chillingworth,T.,
+            Churcher,C.M., Craig,A., Davies,R.M., Devlin,K., Feltwell,T.,
+            Gentles,S., Gwilliam,R., Hamlin,N., Harris,D., Holroyd,S.,
+            Hornsby,T., Horrocks,P., Jagels,K., Jassal,B., Kyes,S., McLean,J.,
+            Moule,S., Mungall,K., Murphy,L., Oliver,K., Quail,M.A.,
+            Rajandream,M.A., Rutter,S., Skelton,J., Squares,R., Squares,S.,
+            Sulston,J.E., Whitehead,S., Woodward,J.R., Newbold,C. and
+            Barrell,B.G.
+  TITLE     The complete nucleotide sequence of chromosome 3 of Plasmodium
+            falciparum
+  JOURNAL   Nature 400 (6744), 532-538 (1999)
+   PUBMED   10448855
+REFERENCE   3  (residues 1 to 232)
+  CONSRTM   NCBI Genome Project
+  TITLE     Direct Submission
+  JOURNAL   Submitted (27-MAR-2018) National Center for Biotechnology
+            Information, NIH, Bethesda, MD 20894, USA
+REFERENCE   4  (residues 1 to 232)
+  AUTHORS   Aslett,M.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (10-MAR-2009) P.falciparum Genome Sequencing Consortium,
+            The Wellcome Trust Sanger Institute, Wellcome Trust Genome Campus,
+            Hinxton, Cambridge CB10 1SA, UK
+REFERENCE   5
+  AUTHORS   Hall,N.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (20-SEP-2002) P.falciparum Genome Sequencing Consortium,
+            The Sanger Centre, Wellcome Trust Genome Campus, Hinxton, Cambridge
+            CB10 1SA, UK
+  REMARK    revised by [5]
+COMMENT     PROVISIONAL REFSEQ: This record has not yet been subject to final
+            NCBI review. The reference sequence is identical to CAB38981.
+FEATURES             Location/Qualifiers
+     source          1..232
+                     /organism="Plasmodium falciparum 3D7"
+                     /isolate="3D7"
+                     /db_xref="taxon:36329"
+                     /chromosome="3"
+     Protein         1..232
+                     /product="mitochondrial ribosomal protein L29/L47
+                     precursor, putative"
+                     /calculated_mol_wt=28153
+     Region          21..109
+                     /region_name="Ribosomal_L29_HIP"
+                     /note="Ribosomal L29 protein/HIP. L29 is a protein of the
+                     large ribosomal Subunit. A homolog, called heparin/heparan
+                     sulfate interacting protein (HIP), has also been
+                     identified in mammals. L29 is located on the surface of
+                     the large ribosomal subunit, where it...; cl09943"
+                     /db_xref="CDD:324550"
+     CDS             1..232
+                     /locus_tag="PF3D7_0315500"
+                     /old_locus_tag="PFC0675c"
+                     /coded_by="XM_001351189.1:1..699"
+                     /db_xref="EnsemblGenomes-Gn:PFC0675c"
+                     /db_xref="EnsemblGenomes-Tr:mRNA"
+                     /db_xref="EnsemblGenomes-Tr:PFC0675c"
+                     /db_xref="GeneID:814469"
+                     /db_xref="GOA:O97270"
+                     /db_xref="InterPro:IPR010729"
+                     /db_xref="UniProtKB/TrEMBL:O97270"
+ORIGIN      
+        1 msffrmkrrl nfvvkrgiee lwensfldnn vdmkkieysk tgdawpcvll rkksfedlhk
+       61 lyyiclkekn kllgeqyfhl qnstkmlqhg rlkkvkltmk riltvlsrra ihdqclrakd
+      121 mlkkqeeref yeiqkfklne qllclkhkmn ilkkynsfsl eqisltfsik kienkiqqid
+      181 iilnplrket mylliphfky qrkysdlpgf iswkkqniia lrnnmsklhr ly
+//
+
