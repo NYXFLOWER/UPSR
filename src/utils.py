@@ -16,4 +16,7 @@ def load_pickle(path):
     return obj
 
 
+# ############## PDB file processing #################
+class Pdb:
+
 
