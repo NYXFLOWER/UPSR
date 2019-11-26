@@ -15,6 +15,7 @@ from Bio.PDB import Selection
 pkl_dir = '../PS_data/data/pdb-pkl'
 pdb_dir = '../PS_data/data/pdb'
 aa_dir = '../PS_data/data/deepsol/'
+out_dir = './data'
 
 # ##############################################################################
 # load amino acid sequence and its solubility
@@ -41,9 +42,9 @@ np.savetxt('./data/map_to_deepsol.txt', idx_map, fmt='%d')
 
 # place holder for dataset
 data = np.zeros(dataset_size, dtype=[('PDB_index', 'U4'),
-                                          ('If_soluble', '<i1'),
-                                          ('Amino_acid_sequence', 'U1700'),
-                                          ('BLAST_result', 'U4000')])
+                                     ('If_soluble', '<i1'),
+                                     ('Amino_acid_sequence', 'U1700'),
+                                     ('BLAST_result', 'U4000')])
 
 # dataset construction
 for i in range(dataset_size):
@@ -61,13 +62,17 @@ data.to_csv('./data/dataset.csv')
 # positive and negative sample processing
 # ##############################################################################
 data = pd.read_csv('./data/dataset_bio.csv')
+target = data['If_soluble']
+sum(target)/len(target)
 
 pdb_idx = data['PDB_index']
 parse = PDBParser(PERMISSIVE=1)
 
 # for i in range(4):
-i = 1
-structure = parse.get_structure(i, os.path.join(pdb_dir, pdb_idx[i]+'.pdb'))
+structure_list = []
+dataset_size = data.shape[0]
+for i in range(dataset_size):
+    structure_list.append(parse.get_structure(i, os.path.join(pdb_dir, pdb_idx[i]+'.pdb')))
 
 
 # p = PDBParser(PERMISSIVE=1)
