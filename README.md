@@ -21,7 +21,9 @@ A review of machine learning methods to predict the solubility of overexpressed 
 
 ### Methods
 
-DeepSol: A Deep Learning Framework for Sequence-Based ProteinSolubility Prediction 
+#### Protein Solubility Prediction
+
+DeepSol: A Deep Learning Framework for Sequence-Based Protein Solubility Prediction 
 [[paper]](https://sameerkhurana10.github.io/papers/pre_print.pdf)
 [[source]](https://zenodo.org/record/1162886#.XdLx8ZJKhMY)
 
@@ -34,6 +36,10 @@ SolXplain: An Explainable Sequence-Based Protein Solubility Predictor
 Solart: A Structure-Based Method To Predict Protein Solubility And Aggregation
 [[paper]](https://www.biorxiv.org/content/early/2019/04/07/600734.full.pdf)
 [[Webserver]](http://babylone.ulb.ac.be/SOLART/)
+
+#### Protein Function Prediction
+
+deepNF: deep network fusion for protein function prediction (*Bioinformatics* 2018) [[paper]](https://academic.oup.com/bioinformatics/article/34/22/3873/5026651)
 
 ## Tools
 
