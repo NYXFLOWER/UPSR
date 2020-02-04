@@ -5,16 +5,8 @@ Used for
 - selected pdb files download
 """
 
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import pickle
-import requests
 import re
-from Bio.Blast import NCBIWWW
-from ssbio.pipeline.gempro import GEMPRO
-from os import path
-from src.utils import *
+from prepare.utils import *
 from tqdm import tqdm
 import sys
 from time import sleep

@@ -61,24 +61,23 @@ data.to_csv('./data/dataset.csv')
 # ##############################################################################
 # positive and negative sample processing
 # ##############################################################################
-data = pd.read_csv('./data/dataset_bio.csv')
-target = data['If_soluble']
-sum(target)/len(target)
+data = pd.read_csv('./prepare/data/dataset_bio.csv', usecols=range(1, 5))
+columns = data.columns.to_list()
+data = data.to_numpy()
 
-pdb_idx = data['PDB_index']
-parse = PDBParser(PERMISSIVE=1)
-
-# for i in range(4):
-structure_list = []
-dataset_size = data.shape[0]
-for i in range(dataset_size):
-    structure_list.append(parse.get_structure(i, os.path.join(pdb_dir, pdb_idx[i]+'.pdb')))
+import re
+with open('../PS_jj/data/ppp/3DKW.pdb', 'r') as f:
+    a = f.read().replace('\n', '')
 
 
-# p = PDBParser(PERMISSIVE=1)
-# s = p.get_structure('1cz4', '1CZ4.pdb')
-#
-a_list = Selection.unfold_entities(structure, 'A')
-# r_list = Selection.unfold_entities(s, 'R')
-# p = np.array([a.get_coord() for a in a_list])
-# rr = [r.get_resname() for r in r_list]
+
+'''
+    data.n_node: number of nodes
+    data.n_node_type: number of node types (aka number of atom type)
+    data.n_edge: number of edges
+
+    data.node_type: int array of the shape (n_node,). Element i is the atom type of i th atom.
+    data.edge_index: int array of the shape (2, n_edge). There is an edge from node i to node j if node i is the node j's d th nearest neighour and d < k.
+    data.edge_direction: float array of the shape (3, n_edge). The i th column is the 3d vector from s[i] to t[i]. s[i] and t[i] are the target and source of i th edge.
+'''
+
