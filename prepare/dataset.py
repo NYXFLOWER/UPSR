@@ -61,15 +61,10 @@ data.to_csv('./data/dataset.csv')
 # ##############################################################################
 # positive and negative sample processing
 # ##############################################################################
-data = pd.read_csv('./prepare/data/dataset_bio.csv', usecols=range(1, 5))
-columns = data.columns.to_list()
-data = data.to_numpy()
+from sklearn.neighbors import NearestNeighbors
 
-import re
-with open('../PS_jj/data/ppp/3DKW.pdb', 'r') as f:
-    a = f.read().replace('\n', '')
-
-
+with open('tmp.pkl', 'bw') as f:
+    pickle.dump(pdb_data, f)
 
 '''
     data.n_node: number of nodes
