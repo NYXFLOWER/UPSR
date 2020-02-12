@@ -43,6 +43,10 @@ Solart: A Structure-Based Method To Predict Protein Solubility And Aggregation
 
 deepNF: deep network fusion for protein function prediction (*Bioinformatics* 2018) [[paper]](https://academic.oup.com/bioinformatics/article/34/22/3873/5026651)
 
+#### ps model
+
+- graph construction: k-nearest neighbours according to relative distance
+
 ## Tools
 
 Biopython - freely available tools for biological computation
