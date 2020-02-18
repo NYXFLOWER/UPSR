@@ -58,6 +58,28 @@ data = pd.DataFrame(data)
 # save to csv
 data.to_csv('./data/dataset.csv')
 
+
+# ##############################################################################
+# plot samples' distribution
+# ##############################################################################
+with open('./prepare/extracted_data/pos_data.pkl', 'br') as f:
+    pos_data = pickle.load(f)
+with open('./prepare/extracted_data/neg_data.pkl', 'br') as f:
+    neg_data = pickle.load(f)
+
+s = 50000
+a = np.array([i['aa_seq'].shape[0] for i in pos_data.values()])
+b = np.array([i['aa_seq'].shape[0] for i in neg_data.values()])
+a, b = a[a < s], b[b < s]
+tt = np.append(a, b)
+_, bins, _ = plt.hist(tt, 500, alpha=0.9, label='All')
+plt.hist(a, bins, facecolor='g', alpha=0.5, label='Pos')
+plt.title('Atom Length Histograms with threshold {}'.format(s))
+plt.legend()
+plt.savefig('./prepare/fig/hist{}.png'.format(s))
+plt.show()
+
+
 # ##############################################################################
 # positive and negative sample processing
 # ##############################################################################
