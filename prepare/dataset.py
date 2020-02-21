@@ -84,9 +84,34 @@ plt.show()
 # positive and negative sample processing
 # ##############################################################################
 from sklearn.neighbors import NearestNeighbors
+from torch_geometric.data import Data
+import torch
 
-with open('tmp.pkl', 'bw') as f:
-    pickle.dump(pdb_data, f)
+pdb = pos_data['3DKW']
+coo = pdb['coo']
+
+k = 3
+s = 20000
+neigh = NearestNeighbors(k + 1)
+neigh.fit(coo)
+neigh_idx = neigh.kneighbors(coo, return_distance=False)[:, 1:]
+
+data = Data()
+
+data.prot_name = pdb
+data.n_nodes = coo.shape[0]
+
+data.node_type = pdb['at_seq']
+data.n_node_type = np.unique(data.node_type).shape[0]
+
+data.n_edges = k * data.n_nodes
+data.edge_index = np.concatenate((np.array([[i] * k for i in range(data.n_nodes)]).reshape((1, -1)),
+                                 neigh_idx.reshape((1, -1))),
+                                 axis=0)
+data.edge_direction = coo[data.edge_index[0]] - coo[data.edge_index[1]]
+torch.save([data, data], './data/{}-{}.pt'.format(k, s))
+
+aaa = torch.load('./data/tmp.pt')
 
 '''
     data.n_node: number of nodes
