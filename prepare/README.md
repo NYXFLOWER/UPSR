@@ -1,6 +1,6 @@
 # Dataset Description
 
-11949 proteins: 4662 soluble (42.25%), and 6370 unsoluble (57.74%).
+11949 proteins: 4662 soluble (42.25%), and 6370 insoluble (57.74%).
 
 |          | Threshold |  Min | Mean |   Max | Count |  Cut |         Total |
 | :------: | :-------: | ---: | ---: | ----: | ----: | ---: | ------------: |
