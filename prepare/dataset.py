@@ -67,16 +67,16 @@ with open('./prepare/extracted_data/pos_data.pkl', 'br') as f:
 with open('./prepare/extracted_data/neg_data.pkl', 'br') as f:
     neg_data = pickle.load(f)
 
-s = 50000
+threshold = 50000
 a = np.array([i['aa_seq'].shape[0] for i in pos_data.values()])
 b = np.array([i['aa_seq'].shape[0] for i in neg_data.values()])
-a, b = a[a < s], b[b < s]
+a, b = a[a < threshold], b[b < threshold]
 tt = np.append(a, b)
 _, bins, _ = plt.hist(tt, 500, alpha=0.9, label='All')
 plt.hist(a, bins, facecolor='g', alpha=0.5, label='Pos')
-plt.title('Atom Length Histograms with threshold {}'.format(s))
+plt.title('Atom Length Histograms with threshold {}'.format(threshold))
 plt.legend()
-plt.savefig('./prepare/fig/hist{}.png'.format(s))
+plt.savefig('./prepare/fig/hist{}.png'.format(threshold))
 plt.show()
 
 
@@ -87,12 +87,12 @@ from sklearn.neighbors import NearestNeighbors
 from torch_geometric.data import Data
 import torch
 
-pdb = pos_data['3DKW']
+pdb = pos_data['5L9U']
 coo = pdb['coo']
 
-k = 3
-s = 20000
-neigh = NearestNeighbors(k + 1)
+k_neigh = 3
+threshold = 20000
+neigh = NearestNeighbors(k_neigh)
 neigh.fit(coo)
 neigh_idx = neigh.kneighbors(coo, return_distance=False)[:, 1:]
 
@@ -104,12 +104,12 @@ data.n_nodes = coo.shape[0]
 data.node_type = pdb['at_seq']
 data.n_node_type = np.unique(data.node_type).shape[0]
 
-data.n_edges = k * data.n_nodes
-data.edge_index = np.concatenate((np.array([[i] * k for i in range(data.n_nodes)]).reshape((1, -1)),
+data.n_edges = k_neigh * data.n_nodes
+data.edge_index = np.concatenate((np.array([[i] * k_neigh for i in range(data.n_nodes)]).reshape((1, -1)),
                                  neigh_idx.reshape((1, -1))),
                                  axis=0)
 data.edge_direction = coo[data.edge_index[0]] - coo[data.edge_index[1]]
-torch.save([data, data], './data/{}-{}.pt'.format(k, s))
+torch.save([data, data], './data/{}-{}.pt'.format(k_neigh, threshold))
 
 aaa = torch.load('./data/tmp.pt')
 
@@ -123,3 +123,20 @@ aaa = torch.load('./data/tmp.pt')
     data.edge_direction: float array of the shape (3, n_edge). The i th column is the 3d vector from s[i] to t[i]. s[i] and t[i] are the target and source of i th edge.
 '''
 
+
+
+
+
+
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
+fig = go.Figure(data=go.Scatter3d(
+    x=coo[:, 0], y=coo[:, 1], z=coo[:, 2],
+    marker=dict(
+        size=4,
+        color=pdb['at_seq']
+    )
+))
+
+fig.show()

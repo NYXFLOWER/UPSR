@@ -114,4 +114,6 @@ data_l/
 Papers/
 Protein_ML/
 TargetTrack-1Jul2017/
-data/
+data/*/
+paper/
+
