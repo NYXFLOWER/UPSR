@@ -49,12 +49,14 @@ with tqdm(total=end-start, file=sys.stdout) as pbar:
         # data[idx, 1] = sol[idx]
 
         # query on pdb-blast
-        page = 'http://www.rcsb.org/pdb/rest/getBlastPDB1?' \
-               'sequence={}&' \
-               'eCutOff={}&' \
-               'maskLowComplexity=yes&' \
-               'matrix=BLOSUM62&' \
-               'outputFormat=HTML'.format(seq, evalue)
+        # page = 'http://www.rcsb.org/pdb/rest/getBlastPDB1?' \
+        #        'sequence={}&' \
+        #        'eCutOff={}&' \
+        #        'maskLowComplexity=yes&' \
+        #        'matrix=BLOSUM62&' \
+        #        'outputFormat=HTML'.format(seq, evalue)
+
+
         outfile = path.join('./data/pdb-blast', str(idx) + '.txt')
         response = download_from_webpage(page, outfile, idx)
         if response:
