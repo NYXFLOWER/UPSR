@@ -8,7 +8,7 @@ import requests
 from colorama import Style, Fore
 from Bio.PDB import parse_pdb_header
 
-in_file = "./deepsol/pos_aas.csv"
+in_file = "./dataset/deepsol/neg_aas.csv"
 aa_seqs = pd.read_csv(in_file).to_numpy().flatten().tolist()
 
 outdir_pdb = './pdb'
@@ -74,7 +74,7 @@ for i in range(0, len(aa_seqs)):
             tmp_dict = {r: p for p, r in pdb_reso}
             best_pdb_id = tmp_dict[max(tmp_dict.keys())]
             # write to file
-            with open('./dataset_pos.csv', 'a') as f:
+            with open('./dataset_neg.csv', 'a') as f:
                 f.write("{}, {}, {}\n".format(best_pdb_id, seq, pdb_reso))
                 print("{} - {}".format(i, pdb_reso))
     except:
