@@ -1,23 +1,24 @@
-import pandas as pd
-import numpy as np
-from tqdm import tqdm
 import json
-import sys
 from os import makedirs, path
-import requests
-from colorama import Style, Fore
-from Bio.PDB import parse_pdb_header
 
-in_file = "./deepsol/pos_aas.csv"
+import pandas as pd
+import requests
+from Bio.PDB import parse_pdb_header
+from colorama import Style, Fore
+
+in_file = "../deepsol/pos_aas.csv"
 aa_seqs = pd.read_csv(in_file).to_numpy().flatten().tolist()
 
-outdir_pdb = './pdb'
+outdir_pdb = '../pdb'
 if not path.exists(outdir_pdb):
     makedirs(outdir_pdb)
 
 
 def error(string):
     print(Fore.RED + 'Error: ' + string + f'{Style.RESET_ALL}')
+
+
+evalue = float('1E-20')
 
 
 def blast_aa_seq(aa_sequence, index):
