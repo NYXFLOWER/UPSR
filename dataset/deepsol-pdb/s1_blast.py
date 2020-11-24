@@ -14,6 +14,7 @@ if not path.exists(outdir_pdb):
     makedirs(outdir_pdb)
 
 
+
 def error(string):
     print(Fore.RED + 'Error: ' + string + f'{Style.RESET_ALL}')
 
