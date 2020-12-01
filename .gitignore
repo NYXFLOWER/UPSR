@@ -105,15 +105,9 @@ venv.bak/
 
 # idea
 .idea/
-Papers/
-Protein_ML/
-QandA.docx
-.DS_Store/
-.ipynb_checkpoints/
-data_l/
-Papers/
-Protein_ML/
-TargetTrack-1Jul2017/
-data/*/
 paper/
+pdb/
+prepare/
+data/
+dataset/
 
