@@ -105,9 +105,16 @@ venv.bak/
 
 # idea
 .idea/
+.vscode/
 paper/
 pdb/
 prepare/
 data/
 dataset/
-
+Protein3D/cache/
+Protein3D/models/
+*.pdb
+*.pt
+Protein3D/equivariant_attention/__pycache__/
+data_old/
+*.out
