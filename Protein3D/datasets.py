@@ -12,7 +12,7 @@ from Bio.PDB import PDBParser
 from Bio.PDB.NeighborSearch import NeighborSearch
 
 import warnings
-# warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore")
 os.path.abspath('.')
 
 DTYPE = np.float32
@@ -42,7 +42,7 @@ class ProtProcess:
     def download_pdb(pdb_id, outfile):
         # check if the pdb file has been downloaded in the outfile
         if os.path.exists(outfile):
-            print(f"The file has been downloaded...")
+            # print(f"The file has been downloaded...")
             return 1
 
         page = 'http://files.rcsb.org/view/{}.pdb'.format(pdb_id)
@@ -70,7 +70,7 @@ class ProtProcess:
             # record residue sequence
             res_name = res.get_resname()
             if residue2idx.get(res_name) is None:
-                break                            # with res2idx_dict_core.pt
+                continue                            # with res2idx_dict_core.pt
                 # residue2idx[res_name] = len(residue2idx)
                 # residue2count[res_name] = 0                 # TODO: remove later
 
@@ -133,8 +133,9 @@ class ProtFunctDataset(Dataset):
     def __load_data(self):
         """Load preprocessed dataset and parser for input protein structure."""
         data = torch.load(self.file_path)[self.mode]
-        self.inputs = data['input_list'][16751:]                # TODO: remove
-        self.targets = data['target_list'][16751:]
+        # s, e = 100, 500
+        self.inputs = data['input_list']               # TODO: remove
+        self.targets = data['target_list']
 
         self.parser = PDBParser()
 
@@ -156,7 +157,10 @@ class ProtFunctDataset(Dataset):
         chain = structure[0][c]
 
         # generate node features
-        res, x = ProtProcess.get_residue_feature(chain)
+        try:
+            res, x = ProtProcess.get_residue_feature(chain)
+        except:
+            print('error pdb: ', pdb)
         num_residues = res.shape[0]
         res = self.to_one_hot(res, len(residue2idx))[...,None]
 
@@ -178,10 +182,20 @@ class ProtFunctDataset(Dataset):
         G.edata['d'] = x[dst] - x[src]
         G.edata['w'] = torch.Tensor(w)
     
-        return G, y
+        return G, y, pdb
         # return torch.Tensor([0, 0])
 
-    
+    def norm2units(self, x, denormalize=True, center=True):
+        # Convert from normalized to QM9 representation
+        if denormalize:
+            x = x * self.std
+            # Add the mean: not necessary for error computations
+            if not center:
+                x += self.mean
+        # x = self.unit_conversion[self.task] * x
+        return x
+
+
     def __connect_partially(self, atom_list, num_residues):
         # initialize edges satisfy the different distance cutoffs
         adjacency = {}
@@ -205,9 +219,12 @@ class ProtFunctDataset(Dataset):
         return np.array(src).astype(IDTYPE), np.array(dst).astype(IDTYPE), np.array(w)
         
 def collate(samples):
-    graphs, y = map(list, zip(*samples))
+    graphs, y, pdb = map(list, zip(*samples))
     batched_graph = dgl.batch(graphs)
-    return batched_graph, torch.tensor(y)    
+    return batched_graph, torch.tensor(y), pdb
+
+def to_np(x):
+    return x.cpu().detach().numpy()
 
 #%%
 # test

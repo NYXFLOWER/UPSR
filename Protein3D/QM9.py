@@ -132,7 +132,7 @@ class QM9Dataset(Dataset):
         # Add bonded edges
         for idx in range(edges.shape[0]):
             adjacency[(edges[idx,0], edges[idx,1])] = edges[idx,2]
-            adjacency[(edges[idx,1], edges[idx,2])] = edges[idx,2]
+            adjacency[(edges[idx,1], edges[idx,0])] = edges[idx,2]
 
         # Convert to numpy arrays
         src = []
@@ -143,7 +143,7 @@ class QM9Dataset(Dataset):
             dst.append(edge[1])
             w.append(weight)
 
-        return np.array(src), np.array(dst), np.array(w)
+        return np.array(src).astype(IDTYPE), np.array(dst).astype(IDTYPE), np.array(w)
 
 
     def connect_partially(self, edge):
@@ -152,7 +152,7 @@ class QM9Dataset(Dataset):
         # src = np.concatenate([edge[:,0], edge[:,1]]).astype(IDTYPE)
         # dst = np.concatenate([edge[:,1], edge[:,0]]).astype(IDTYPE)
         w = np.concatenate([edge[:,2], edge[:,2]])
-        return src, dst, w
+        return src.astype(IDTYPE), dst.astype(IDTYPE), w
 
 
     def __getitem__(self, idx):
@@ -213,7 +213,7 @@ if __name__ == "__main__":
         batched_graph = dgl.batch(graphs)
         return batched_graph, torch.tensor(y)
 
-    dataset = QM9Dataset('/home/flower/github/Protein3D/Protein3D/QM9_data.pt', "homo", mode='train', fully_connected=True)
+    dataset = QM9Dataset('/home/flower/github/Protein3D/Protein3D/QM9_data.pt', "homo", mode='train', fully_connected=False)
     dataloader = DataLoader(dataset, batch_size=32, shuffle=True, collate_fn=collate)
 
     for data in dataloader:
