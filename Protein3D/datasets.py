@@ -115,7 +115,7 @@ class ProtFunctDataset(Dataset):
 
         Args:
             file_path (str): path to data
-            mode (str, optional): {train/test/val}. Defaults to 'train'.
+            mode (str, optional): {train/test/valid}. Defaults to 'train'.
             if_transform (bool, optional): if applying data augmentation function. Defaults to True.
         """
         self.file_path = file_path
@@ -134,7 +134,7 @@ class ProtFunctDataset(Dataset):
         """Load preprocessed dataset and parser for input protein structure."""
         data = torch.load(self.file_path)[self.mode]
         # s, e = 100, 500
-        self.inputs = data['input_list']               # TODO: remove
+        self.inputs = data['input_list']             # TODO: remove
         self.targets = data['target_list']
 
         self.parser = PDBParser()
@@ -230,12 +230,13 @@ def to_np(x):
 # test
 if __name__ == '__main__':
     try:
-        dataset = ProtFunctDataset('../data/ProtFunct.pt', mode='train')
-        dataloader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=collate)
+        for mode in ['train', 'test', 'valid']:
+            dataset = ProtFunctDataset('../data/ProtFunct.pt', mode='test')
+            dataloader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=collate)
 
-        for i, data in enumerate(dataloader):
-            print(i)
+            for i, data in enumerate(dataloader):
+                print('{mode}: {i}')
     finally:
-        torch.save(residue2idx, 'res2idx_dict.pt')
+        torch.save(residue2idx, 'res2idx_dict_tmp.pt')
         # torch.save(residue2count, 'res2count_dict.pt')
 
