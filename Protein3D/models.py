@@ -12,16 +12,20 @@ from equivariant_attention.modules import GConvSE3, GNormSE3, get_basis_and_r, G
 from equivariant_attention.fibers import Fiber
 
 import pytorch_lightning as pl
-from pytorch_lightning.metrics import functional as FM
+# from pytorch_lightning.metrics import functional as FM
+import torchmetrics as tm
 
 from datasets import *
 
+EPS = 1e-13
+
 # ##################### Hyperpremeter Setting #########################
 class ExpSetting(object):
-    def __init__(self, distance_cutoff=[3, 3.5], data_address='../data/ProtFunct.pt', log_file='log', batch_size=8, lr=1e-3, num_epochs=2, num_workers=4, num_layers=2, num_degrees=3, num_channels=20, num_nlayers=0, pooling='avg', head=1, div=4, seed=0, num_class=384): 
+    def __init__(self, distance_cutoff=[3, 3.5], data_address='../data/ProtFunct.pt', log_file='log', log_dir = 'log/', batch_size=4, lr=1e-3, num_epochs=2, num_workers=4, num_layers=2, num_degrees=3, num_channels=20, num_nlayers=0, pooling='avg', head=1, div=4, seed=0, num_class=384): 
         self.distance_cutoff = distance_cutoff
         self.data_address = data_address
         self.log_file = log_file
+        self.log_dir = log_dir
 
         self.batch_size = batch_size
         self.lr = lr          		 	  # learning rate
@@ -469,3 +473,189 @@ class ProtMultClass(pl.LightningModule):
     def write_to_epoch_log(self, context: str):
         with open(self.log_epoch_file, 'a') as f:
             f.write(f'{context}')    
+
+
+class ProtBinaryClass(pl.LightningModule):
+    def __init__(self, setting: ExpSetting, class_idx: int=0):
+        super().__init__()
+        self.setting = setting
+        self.class_idx = class_idx
+        self.__setup_log(setting.log_dir)
+        self.__setup_matrices()
+
+        self.model = self.__build_model()
+        # print(self.model)
+
+    def __setup_matrices(self):
+        metrics = tm.MetricCollection([tm.Accuracy(), tm.AUROC()])
+        self.metrics_dict = {}
+        self.metrics_dict['train'] = metrics.clone(prefix='train_')
+        self.metrics_dict['valid'] = metrics.clone(prefix='valid_')
+        self.metrics_dict['test'] = metrics.clone(prefix='test_')
+
+    def __setup_log(self, file_dir):
+        # check directory, create if not exist
+        if not os.path.exists(file_dir):
+            os.makedirs(file_dir)
+        
+        # log file paths
+        self.log_step_file = os.path.join(file_dir, 'step.txt')
+        self.log_epoch_file = os.path.join(file_dir, 'epoch.txt')
+        self.log_test_file = os.path.join(file_dir, 'test.txt')
+
+        # write head
+        self.write_to_step_log(',step_loss\n')
+        self.write_to_epoch_log(',loss_valid,acc_valid,auroc_valid,loss_train,acc_train auroc_train\n')
+        
+    def __build_model(self):
+        model = []
+
+        model.append(SE3TransformerEncoder(self.setting.num_layers, len(residue2idx), self.setting.num_channels, self.setting.num_nlayers, self.setting.num_degrees, edge_dim=3, n_bonds=self.setting.n_bounds, div=self.setting.div, pooling=self.setting.pooling, head=self.setting.head))
+
+        mid_dim = model[0].fibers['out'].n_features
+
+        model.append(nn.Linear(mid_dim, mid_dim))
+        model.append(nn.ReLU(inplace=True))
+        model.append(nn.Linear(mid_dim, 1))
+
+        return nn.ModuleList(model)
+
+    def forward(self, g):
+        """get model prediction"""
+        prob = self._run_step(g)
+
+        return prob
+
+    def _run_step(self, g):
+        """compute forward"""
+        z = g
+        for layer in self.model:
+            z = layer(z)
+
+        return torch.sigmoid(z)
+
+    def __to_onehot(self, y_list):
+        # convert class number to onehot representation
+
+        return F.one_hot(y_list, num_classes=self.setting.num_class)
+
+    def compute_loss(self, preds):
+        n = self.setting.batch_size
+        if preds.shape[0] < 2*n:
+            n = int(preds.shape[0]/2)
+        
+        pos_loss = -torch.log(preds[:n] + EPS).mean()
+        neg_loss = -torch.log(1 - preds[n:] + EPS).mean()
+        loss = pos_loss + neg_loss
+        
+        return loss*1e3
+
+    def __compute_epoch_metrics(self, mode):
+        outputs = self.metrics_dict[mode].compute()
+        self.metrics_dict[mode].reset()
+
+        return outputs
+
+    def step(self, batch, mode='train'):
+        g, targets, pdb = batch
+        preds = self._run_step(g).flatten()
+
+        loss = self.compute_loss(preds)
+
+        outputs = self.metrics_dict[mode](preds, targets)
+        outputs[f'{mode}_loss'] = loss
+        
+        return loss, outputs 
+
+    def training_step(self, batch, batch_idx):
+        loss, outputs = self.step(batch, 'train')
+        
+        self.log_dict(outputs, on_step=True, on_epoch=True)
+        self.write_to_step_log(f',{loss:.4f}\n')
+
+        return loss
+
+    def training_epoch_end(self, outputs: list) -> None:
+        # print(outputs)
+        # compute loss on all batches
+        epoch_loss = torch.stack([x["loss"] for x in outputs]).mean()
+        outputs = self.__compute_epoch_metrics('train')
+
+        self.write_to_epoch_log(f",{epoch_loss:.4f}, {outputs['train_Accuracy']:.4f}, {outputs['train_AUROC']:.4f}\n")
+
+    def validation_step(self, batch, batch_idx):
+        loss, outputs = self.step(batch, 'valid')
+        outputs['valid_loss'] = loss
+
+        self.log_dict(outputs, on_step=True, on_epoch=True)
+        
+        return loss
+    
+    def validation_epoch_end(self, outputs: list) -> None:
+        epoch_loss = torch.stack(outputs).mean()
+        outputs = self.__compute_epoch_metrics('valid')
+
+        self.write_to_epoch_log(f",{epoch_loss:.4f}, {outputs['valid_Accuracy']:.4f}, {outputs['valid_AUROC']:.4f}")
+
+    def test_step(self, batch, batch_idx):
+        loss, outputs = self.step(batch, 'test')
+
+        self.log_dict(outputs, on_step=True, on_epoch=True)
+        
+        return loss
+    
+    def test_epoch_end(self, outputs: list) -> None:
+        epoch_loss = torch.stack(outputs).mean()
+        outputs = self.__compute_epoch_metrics('test')
+
+        self.write_to_test_log(f"{epoch_loss:.4f}, {outputs['test_Accuracy']:.4f}, {outputs['test_AUROC']:.4f}\n")
+
+    def _load_data(self, mode='train'):
+        dataset = ProtFunctDatasetBinary(
+            self.setting.data_address, 
+            mode=mode, 
+            if_transform=True, 
+            dis_cut=self.setting.distance_cutoff,
+            class_idx=self.class_idx)
+
+        loader = DataLoader(
+            dataset, 
+            batch_size=self.setting.batch_size, 
+            shuffle=False, 
+            collate_fn=collate_ns, 
+            num_workers=self.setting.num_workers)
+
+        return loader
+
+    def train_dataloader(self):
+
+        return self._load_data(mode='train')
+
+    def val_dataloader(self):
+
+        return self._load_data(mode='valid')
+
+    def test_dataloader(self):
+
+        return self._load_data(mode='test')
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), self.setting.lr)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer, 
+            self.setting.num_epochs, 
+            eta_min=1e-4)
+
+        return [optimizer], [scheduler]
+
+    def write_to_step_log(self, context: str):
+        with open(self.log_step_file, 'a') as f:
+            f.write(f'{context}')
+
+    def write_to_epoch_log(self, context: str):
+        with open(self.log_epoch_file, 'a') as f:
+            f.write(f'{context}')  
+
+    def write_to_test_log(self, context: str):
+        with open(self.log_test_file, 'a') as f:
+            f.write(f'{context}')
