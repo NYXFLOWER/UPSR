@@ -2,12 +2,6 @@
 import os
 os.chdir('/home/flower/github/Protein3D/Protein3D')
 
-from equivariant_attention.utils_profiling import *
-from dgl.data.utils import save_graphs
-import math
-from torch import nn, optim
-from torch.nn import functional as F
-
 from models import *
 
 import pytorch_lightning as pl
@@ -53,7 +47,7 @@ def train_binary_class(class_idx):
 # trainer.validate(model)
 # t = trainer.test(model)
 
-for i in range(384):
+for i in range(293, 384):
     print(f"============ MODEL {i:3d} ============")
     train_binary_class(i)
 
