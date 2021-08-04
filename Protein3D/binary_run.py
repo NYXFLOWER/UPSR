@@ -1,7 +1,4 @@
-#%%
-import os
-os.chdir('/home/flower/github/Protein3D/Protein3D')
-
+from github.Protein3D.Protein3D.models import ExpSetting, ProtBinaryClass
 from models import *
 
 import pytorch_lightning as pl

@@ -16,11 +16,12 @@ EPS = 1e-13
 
 # ##################### Hyperpremeter Setting #########################
 class ExpSetting(object):
-    def __init__(self, distance_cutoff=[3, 3.5], data_address='../data/ProtFunct.pt', log_file='log', log_dir = 'log/', batch_size=4, lr=1e-3, num_epochs=2, num_workers=4, num_layers=2, num_degrees=3, num_channels=20, num_nlayers=0, pooling='avg', head=1, div=4, seed=0, num_class=384, use_classes=None): 
+    def __init__(self, distance_cutoff=[3, 3.5], data_address='../data/ProtFunct.pt', log_file=None, log_dir = 'log/', batch_size=4, lr=1e-3, num_epochs=2, num_workers=4, num_layers=2, num_degrees=3, num_channels=20, num_nlayers=0, pooling='avg', head=1, div=4, seed=0, num_class=384, use_classes=None, hyperparameter=None, decoder_mid_dim=60): 
         self.distance_cutoff = distance_cutoff
         self.data_address = data_address
         self.log_file = log_file
         self.log_dir = log_dir
+        self.hyperparameter = hyperparameter
 
         self.batch_size = batch_size
         self.lr = lr          		 	  # learning rate
@@ -34,6 +35,7 @@ class ExpSetting(object):
         self.pooling = pooling        	  # choose from avg or max
         self.head = head                  # number of attention heads
         self.div = div                    # low dimensional embedding fraction
+        self.decoder_mid_dim = decoder_mid_dim
 
         self.num_class = num_class        # number of class in multi-class decoder
         self.use_classes = use_classes
@@ -319,169 +321,183 @@ class ProtBinary(pl.LightningModule):
         return [optimizer], [scheduler]
 
 
-class ProtMultClass(pl.LightningModule):
-    def __init__(self, setting: ExpSetting):
-        super().__init__()
-        self.setting = setting
-        self.__setup_log(setting.log_file)
+# class ProtMultClass(pl.LightningModule):
+#     def __init__(self, setting: ExpSetting):
+#         super().__init__()
+#         self.setting = setting
+#         self.__setup_log(setting.log_file)
 
-        self.model = self.__build_model()
+#         self.model = self.__build_model()
 
-        self.max_steps = 3
-        print(self.model)
+#         self.max_steps = 3
+#         print(self.model)
 
-    def __setup_log(self, file_name):
-        self.log_step_file = f'{file_name}_step.txt'
-        self.log_epoch_file = f'{file_name}_epoch.txt'
+#     def __setup_log(self, file_name):
+#         self.log_step_file = f'{file_name}_step.txt'
+#         self.log_epoch_file = f'{file_name}_epoch.txt'
 
-        self.write_to_step_log(',step_loss\n')
-        self.write_to_epoch_log(',epoch_loss_valid,epoch_loss_train\n')
+#         self.write_to_step_log(',step_loss\n')
+#         self.write_to_epoch_log(',epoch_loss_valid,epoch_loss_train\n')
         
-    def __build_model(self):
-        model = []
+#     def __build_model(self):
+#         model = []
 
-        model.append(SE3TransformerEncoder(self.setting.num_layers, len(residue2idx), self.setting.num_channels, self.setting.num_nlayers, self.setting.num_degrees, edge_dim=3, n_bonds=self.setting.n_bounds, div=self.setting.div, pooling=self.setting.pooling, head=self.setting.head))
+#         model.append(SE3TransformerEncoder(self.setting.num_layers, len(residue2idx), self.setting.num_channels, self.setting.num_nlayers, self.setting.num_degrees, edge_dim=3, n_bonds=self.setting.n_bounds, div=self.setting.div, pooling=self.setting.pooling, head=self.setting.head))
 
-        mid_dim = model[0].fibers['out'].n_features
+#         mid_dim = model[0].fibers['out'].n_features
 
-        model.append(nn.Linear(mid_dim, mid_dim))
-        model.append(nn.ReLU(inplace=True))
+#         model.append(nn.Linear(mid_dim, mid_dim))
+#         model.append(nn.ReLU(inplace=True))
 
-        model.append(MultiClassInnerProductLayer(mid_dim, self.setting.num_class))
+#         model.append(MultiClassInnerProductLayer(mid_dim, self.setting.num_class))
 
-        return nn.ModuleList(model)
+#         return nn.ModuleList(model)
 
-    def forward(self, g):
-        """get model prediction"""
-        prob = self._run_step(g)
+#     def forward(self, g):
+#         """get model prediction"""
+#         prob = self._run_step(g)
 
-        return prob
+#         return prob
 
-    def _run_step(self, g):
-        """compute forward"""
-        z = g
-        for layer in self.model:
-            z = layer(z)
+#     def _run_step(self, g):
+#         """compute forward"""
+#         z = g
+#         for layer in self.model:
+#             z = layer(z)
 
-        return torch.sigmoid(z)
+#         return torch.sigmoid(z)
 
-    def __to_onehot(self, y_list):
-        # convert class number to onehot representation
+#     def __to_onehot(self, y_list):
+#         # convert class number to onehot representation
 
-        return F.one_hot(y_list, num_classes=self.setting.num_class)
+#         return F.one_hot(y_list, num_classes=self.setting.num_class)
 
-    def step(self, batch, batch_idx):
-        # print(batch_idx)
-        g, y_org, pdb = batch
+#     def step(self, batch, batch_idx):
+#         # print(batch_idx)
+#         g, y_org, pdb = batch
 
-        pred = self._run_step(g)
-        y = self.__to_onehot(y_org).type_as(pred)
+#         pred = self._run_step(g)
+#         y = self.__to_onehot(y_org).type_as(pred)
 
-        pos_pred = pred * y
+#         pos_pred = pred * y
 
-        l1_loss = torch.sum(torch.abs(pred - y))  + torch.sum(torch.abs(pos_pred - y)) * pred.shape[1]
-        # l2_loss = torch.sum((pred - y)**2) + torch.sum((pos_pred - y)**2) * pred.shape[1]
+#         l1_loss = torch.sum(torch.abs(pred - y))  + torch.sum(torch.abs(pos_pred - y)) * pred.shape[1]
+#         # l2_loss = torch.sum((pred - y)**2) + torch.sum((pos_pred - y)**2) * pred.shape[1]
         
-        # if use_mean:
-        # l1_loss /= pred.shape[0]
-        # l2_loss /= pred.shape[0]		
+#         # if use_mean:
+#         # l1_loss /= pred.shape[0]
+#         # l2_loss /= pred.shape[0]		
 
-        loss = l1_loss
+#         loss = l1_loss
 
-        logs = {
-            "l1_loss": l1_loss.to('cpu'),
-            # "l2_loss": l2_loss.to('cpu'),
-        }
-        return loss, logs
+#         logs = {
+#             "l1_loss": l1_loss.to('cpu'),
+#             # "l2_loss": l2_loss.to('cpu'),
+#         }
+#         return loss, logs
 
-    def training_step(self, batch, batch_idx):
-        loss, logs = self.step(batch, batch_idx)
-        self.log_dict({f"train_{k}": v for k, v in logs.items()}, on_step=True, on_epoch=True)
+#     def training_step(self, batch, batch_idx):
+#         loss, logs = self.step(batch, batch_idx)
+#         self.log_dict({f"train_{k}": v for k, v in logs.items()}, on_step=True, on_epoch=True)
 
-        self.write_to_step_log(f',{loss:.4f}\n')
-        # print('train ', loss)
+#         self.write_to_step_log(f',{loss:.4f}\n')
+#         # print('train ', loss)
 
-        return loss
+#         return loss
 
-    def training_epoch_end(self, outputs: list) -> None:
-        epoch_loss = torch.stack([x["loss"] for x in outputs]).mean()
-        self.write_to_epoch_log(f',{epoch_loss:.4f}\n')
+#     def training_epoch_end(self, outputs: list) -> None:
+#         epoch_loss = torch.stack([x["loss"] for x in outputs]).mean()
+#         self.write_to_epoch_log(f',{epoch_loss:.4f}\n')
 
-    def validation_step(self, batch, batch_idx):
-        loss, logs = self.step(batch, batch_idx)
-        self.log_dict({f"val_{k}": v for k, v in logs.items()})
+#     def validation_step(self, batch, batch_idx):
+#         loss, logs = self.step(batch, batch_idx)
+#         self.log_dict({f"val_{k}": v for k, v in logs.items()})
 
-        # print('valid ', loss)
+#         # print('valid ', loss)
 
-        return loss
+#         return loss
     
-    def validation_epoch_end(self, outputs: list) -> None:
-        epoch_loss = torch.stack(outputs).mean()
-        self.write_to_epoch_log(f',{epoch_loss:.4f}')
+#     def validation_epoch_end(self, outputs: list) -> None:
+#         epoch_loss = torch.stack(outputs).mean()
+#         self.write_to_epoch_log(f',{epoch_loss:.4f}')
 
-    def test_step(self, batch, batch_idx):
-        loss, logs = self.step(batch, batch_idx)
-        self.log_dict({f"test_{k}": v for k, v in logs.items()}, on_step=False, on_epoch=True)
+#     def test_step(self, batch, batch_idx):
+#         loss, logs = self.step(batch, batch_idx)
+#         self.log_dict({f"test_{k}": v for k, v in logs.items()}, on_step=False, on_epoch=True)
 
-        return loss
+#         return loss
 
-    def _load_data(self, mode='train'):
-        dataset = ProtFunctDataset(
-            self.setting.data_address, 
-            mode=mode, 
-            if_transform=True, 
-            dis_cut=self.setting.distance_cutoff)
+#     def _load_data(self, mode='train'):
+#         dataset = ProtFunctDataset(
+#             self.setting.data_address, 
+#             mode=mode, 
+#             if_transform=True, 
+#             dis_cut=self.setting.distance_cutoff)
 
-        loader = DataLoader(
-            dataset, 
-            batch_size=self.setting.batch_size, 
-            shuffle=False, 
-            collate_fn=collate, 
-            num_workers=self.setting.num_workers)
+#         loader = DataLoader(
+#             dataset, 
+#             batch_size=self.setting.batch_size, 
+#             shuffle=False, 
+#             collate_fn=collate, 
+#             num_workers=self.setting.num_workers)
 
-        return loader
+#         return loader
 
-    def train_dataloader(self):
+#     def train_dataloader(self):
 
-        return self._load_data(mode='train')
+#         return self._load_data(mode='train')
 
-    def val_dataloader(self):
+#     def val_dataloader(self):
 
-        return self._load_data(mode='valid')
+#         return self._load_data(mode='valid')
 
-    def test_dataloader(self):
+#     def test_dataloader(self):
 
-        return self._load_data(mode='test')
+#         return self._load_data(mode='test')
 
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), self.setting.lr)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            optimizer, 
-            self.setting.num_epochs, 
-            eta_min=1e-4)
+#     def configure_optimizers(self):
+#         optimizer = torch.optim.Adam(self.parameters(), self.setting.lr)
+#         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+#             optimizer, 
+#             self.setting.num_epochs, 
+#             eta_min=1e-4)
 
-        return [optimizer], [scheduler]
+#         return [optimizer], [scheduler]
 
-    def write_to_step_log(self, context: str):
-        with open(self.log_step_file, 'a') as f:
-            f.write(f'{context}')
+#     def write_to_step_log(self, context: str):
+#         with open(self.log_step_file, 'a') as f:
+#             f.write(f'{context}')
 
-    def write_to_epoch_log(self, context: str):
-        with open(self.log_epoch_file, 'a') as f:
-            f.write(f'{context}')    
+#     def write_to_epoch_log(self, context: str):
+#         with open(self.log_epoch_file, 'a') as f:
+#             f.write(f'{context}')    
 
 
-class ProtMultClassTest(pl.LightningModule):
+class ProtMultClass(pl.LightningModule):
     def __init__(self, setting: ExpSetting):
         super().__init__()
         self.setting = setting
         self.__setup_log(setting.log_dir)
         self.__setup_matrices()
+        self.__setup_loss()
 
         self.model = self.__build_model()
 
-    def __setup_matrices(self, file_dir):
-        # check directory, create if not exist
+    def __setup_loss(self):
+        # self.loss_function = torch.nn.NLLLoss()
+        self.loss_function = torch.nn.CrossEntropyLoss()
+
+    def __setup_matrices(self):
+        metrics = tm.MetricCollection([tm.Accuracy(num_classes=self.setting.num_class)
+        # , tm.AUROC(num_classes=self.setting.num_class, compute_on_step=False)
+        ])
+        self.metrics_dict = {}
+        self.metrics_dict['train'] = metrics.clone(prefix='train_')
+        self.metrics_dict['valid'] = metrics.clone(prefix='valid_')
+        self.metrics_dict['test'] = metrics.clone(prefix='test_')
+
+
+    def __setup_log(self, file_dir):
         if not os.path.exists(file_dir):
             os.makedirs(file_dir)
         
@@ -489,19 +505,16 @@ class ProtMultClassTest(pl.LightningModule):
         self.log_step_file = os.path.join(file_dir, 'step.txt')
         self.log_epoch_file = os.path.join(file_dir, 'epoch.txt')
         self.log_test_file = os.path.join(file_dir, 'test.txt')
+        self.log_valid_file = os.path.join(file_dir, 'valid.txt')
 
         # write head
-        self.write_to_step_log(',step_loss\n')
+        self.write_to_step_log('step_loss\n')
+        self.write_to_valid_log('step_loss\n')
         self.write_to_epoch_log(',loss_valid,acc_valid,auroc_valid,loss_train,acc_train, auroc_train\n')
 
+        # log hyperparameter
+        torch.save(self.setting, os.path.join(file_dir, 'setting.pt'))
 
-    def __setup_log(self, file_name):
-        self.log_step_file = f'{file_name}_step.txt'
-        self.log_epoch_file = f'{file_name}_epoch.txt'
-
-        self.write_to_step_log(',step_loss\n')
-        self.write_to_epoch_log(',epoch_loss_valid,epoch_loss_train\n')
-        
     def __build_model(self):
         model = []
 
@@ -509,10 +522,10 @@ class ProtMultClassTest(pl.LightningModule):
 
         mid_dim = model[0].fibers['out'].n_features
 
-        model.append(nn.Linear(mid_dim, mid_dim))
+        model.append(nn.Linear(mid_dim, self.setting.decoder_mid_dim))
         model.append(nn.ReLU(inplace=True))
 
-        model.append(MultiClassInnerProductLayer(mid_dim, self.setting.num_class))
+        model.append(MultiClassInnerProductLayer(self.setting.decoder_mid_dim, self.setting.num_class))
 
         return nn.ModuleList(model)
 
@@ -522,25 +535,33 @@ class ProtMultClassTest(pl.LightningModule):
 
         return prob
 
-    def _run_step(self, g):
+    def _run_step(self, g, if_sigmoid=True):
         """compute forward"""
         z = g
         for layer in self.model:
             z = layer(z)
-
-        return torch.sigmoid(z).flatten()
+        if if_sigmoid:
+            z = torch.sigmoid(z)
+        return z
 
     def __to_onehot(self, y_list):
         # convert class number to onehot representation
 
         return F.one_hot(y_list, num_classes=self.setting.num_class)
 
+    def __compute_epoch_metrics(self, mode):
+        outputs = self.metrics_dict[mode].compute()
+        self.metrics_dict[mode].reset()
+
+        return outputs
+
     def step(self, batch, mode='train'):
         # print(batch_idx)
         g, targets, pdb = batch
-
+        
         preds = self._run_step(g)
-        loss = torch.nn.NLLLoss(preds, targets)
+
+        loss = self.loss_function(preds, targets)
 
         outputs = self.metrics_dict[mode](preds, targets)
         outputs[f'{mode}_loss'] = loss
@@ -559,21 +580,27 @@ class ProtMultClassTest(pl.LightningModule):
         epoch_loss = torch.stack([x["loss"] for x in outputs]).mean()
         outputs = self.__compute_epoch_metrics('train')
 
-        self.write_to_epoch_log(f",{epoch_loss:.4f}, {outputs['train_Accuracy']:.4f}, {outputs['train_AUROC']:.4f}\n")
+        self.write_to_epoch_log(f",{epoch_loss:.4f}, {outputs['train_Accuracy']:.4f}, 0\n")
+        # self.write_to_epoch_log(f",{epoch_loss:.4f}, {outputs['train_Accuracy']:.4f}, {outputs['train_AUROC']:.4f}\n")
+        print(f"train --> loss: {epoch_loss:.4f}, acc: {outputs['train_Accuracy']:.4f}")
+
 
     def validation_step(self, batch, batch_idx):
         loss, outputs = self.step(batch, 'valid')
         outputs['valid_loss'] = loss
 
         self.log_dict(outputs, on_step=True, on_epoch=True)
+        self.write_to_valid_log(f'{loss:.4f}\n')
 
         return loss
     
     def validation_epoch_end(self, outputs: list) -> None:
         epoch_loss = torch.stack(outputs).mean()
         outputs = self.__compute_epoch_metrics('valid')
+        print(f"valid --> loss: {epoch_loss:.4f}, acc: {outputs['valid_Accuracy']:.4f}")
 
-        self.write_to_epoch_log(f",{epoch_loss:.4f}, {outputs['valid_Accuracy']:.4f}, {outputs['valid_AUROC']:.4f}")
+        self.write_to_epoch_log(f",{epoch_loss:.4f}, {outputs['valid_Accuracy']:.4f}, 0")
+        # self.write_to_epoch_log(f",{epoch_loss:.4f}, {outputs['valid_Accuracy']:.4f}, {outputs['valid_AUROC']:.4f}")
 
     def test_step(self, batch, batch_idx):
         loss, outputs = self.step(batch, 'test')
@@ -586,10 +613,11 @@ class ProtMultClassTest(pl.LightningModule):
         epoch_loss = torch.stack(outputs).mean()
         outputs = self.__compute_epoch_metrics('test')
 
-        self.write_to_test_log(f"{epoch_loss:.4f}, {outputs['test_Accuracy']:.4f}, {outputs['test_AUROC']:.4f}\n")
+        self.write_to_test_log(f"{epoch_loss:.4f}, {outputs['test_Accuracy']:.4f}, 0\n")
+        # self.write_to_test_log(f"{epoch_loss:.4f}, {outputs['test_Accuracy']:.4f}, {outputs['test_AUROC']:.4f}\n")
 
     def _load_data(self, mode='train'):
-        dataset = ProtFunctDatasetTest(
+        dataset = ProtFunctDatasetMultiClass(
             self.setting.data_address, 
             mode=mode, 
             if_transform=True, 
@@ -637,6 +665,13 @@ class ProtMultClassTest(pl.LightningModule):
     def write_to_test_log(self, context: str):
         with open(self.log_test_file, 'a') as f:
             f.write(f'{context}')
+
+    def write_to_valid_log(self, context: str):
+        with open(self.log_valid_file, 'a') as f:
+            f.write(f'{context}')
+
+
+
 
 
 class ProtBinaryClass(pl.LightningModule):

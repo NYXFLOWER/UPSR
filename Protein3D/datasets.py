@@ -220,7 +220,7 @@ class ProtFunctDataset(Dataset):
 
         return np.array(src).astype(IDTYPE), np.array(dst).astype(IDTYPE), np.array(w)
         
-class ProtFunctDatasetTest(Dataset):
+class ProtFunctDatasetMultiClass(Dataset):
     atom_feature_size = len(residue2idx)
 
     def __init__(self, file_path, mode: str='train', if_transform: bool=True, dis_cut: list=[3.0, 3.5], use_classes: list=None):
@@ -243,6 +243,8 @@ class ProtFunctDatasetTest(Dataset):
         
         self.__load_data()
         self.len = self.inputs.shape[0]
+
+        print(f'Data summary -> {len(use_classes) if use_classes else 384} protein classes, and {self.inputs.shape[0]} protein samples')
 
     def __load_data(self):
         """Load preprocessed dataset and parser for input protein structure."""
