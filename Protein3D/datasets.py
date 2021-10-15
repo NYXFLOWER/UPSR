@@ -1,5 +1,6 @@
 #%%
 import os
+from shutil import Error
 import requests
 
 import dgl
@@ -9,6 +10,9 @@ import numpy as np
 from torch.utils.data import DataLoader, Dataset
 from Bio.PDB import PDBParser
 from Bio.PDB.NeighborSearch import NeighborSearch
+from dgl.data.utils import save_graphs, load_graphs
+
+# from equivariant_attention.utils_profiling import * # load before other local module
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -17,7 +21,7 @@ os.path.abspath('.')
 DTYPE = np.float32
 IDTYPE = np.int32
 
-data_dir = '/home/flower/projects/def-laurence/flower'
+data_dir = "/global/home/hpc4590/share/protein"
 # data_dir = '../data'
 residue2idx = torch.load('../data/res2idx_dict_core.pt')
 # residue2count = torch.load('../data/res2count_dict.pt')
@@ -38,11 +42,14 @@ residue2idx = torch.load('../data/res2idx_dict_core.pt')
 
 class ProtProcess:
     @staticmethod
-    def download_pdb(pdb_id, outfile):
+    def download_pdb(pdb_id, outfile, replace=False):
         # check if the pdb file has been downloaded in the outfile
-        if os.path.exists(outfile):
-            # print(f"The file has been downloaded...")
-            return 1
+        if not replace:
+            if os.path.exists(outfile):
+                # print(f"The file has been downloaded...")
+                # check if the file is empty
+                if os.stat(outfile).st_size:
+                    return 1
 
         page = 'http://files.rcsb.org/view/{}.pdb'.format(pdb_id)
         req = requests.get(page)
@@ -156,13 +163,16 @@ class ProtFunctDataset(Dataset):
         p, c = pdb.split('.')           # pdb ID and chain ID
         ProtProcess.download_pdb(p, f'{data_dir}/pdb/{p}.pdb')
         structure = self.parser.get_structure('a', f'{data_dir}/pdb/{p}.pdb')
-        chain = structure[0][c]
 
         # generate node features
         try:
+            chain = structure[0][c]
             res, x = ProtProcess.get_residue_feature(chain)
-        except:
+        except Error as err:
+            print('error: ', err)
             print('error pdb: ', pdb)
+            ProtProcess.download_pdb(p, f'{data_dir}/pdb/{p}.pdb', replace=True)
+
         num_residues = res.shape[0]
         res = self.to_one_hot(res, len(residue2idx))[...,None]
 
@@ -220,6 +230,7 @@ class ProtFunctDataset(Dataset):
 
         return np.array(src).astype(IDTYPE), np.array(dst).astype(IDTYPE), np.array(w)
         
+#%%
 class ProtFunctDatasetMultiClass(Dataset):
     atom_feature_size = len(residue2idx)
 
@@ -244,13 +255,21 @@ class ProtFunctDatasetMultiClass(Dataset):
         self.__load_data()
         self.len = self.inputs.shape[0]
 
+        self.cache_dir = f"{data_dir}/graph/{dis_cut[0]}-{dis_cut[1]}/"
+        if not os.path.exists(self.cache_dir):
+            os.mkdir(self.cache_dir)
+
         print(f'Data summary -> {len(use_classes) if use_classes else 384} protein classes, and {self.inputs.shape[0]} protein samples')
 
     def __load_data(self):
         """Load preprocessed dataset and parser for input protein structure."""
         data = torch.load(self.file_path)[self.mode]
-        self.inputs = np.array(data['input_list'])      
-        self.targets = np.array(data['target_list'])
+        self.inputs = np.array(data['input_list']) #[2393*8 :] 
+        self.targets = np.array(data['target_list']) #[2393*8 :] 
+
+        # if self.mode == 'train':
+        #     self.inputs = self.inputs[3500*8:]
+        #     self.targets = self.targets[3500*8:]
 
         if self.use_classes:
             self.__use_selected_classes()
@@ -270,20 +289,27 @@ class ProtFunctDatasetMultiClass(Dataset):
         one_hot[np.arange(len(data)),data] = 1
         return one_hot
 
-    def __prepare_item__(self, pdb):
+    def __prepare_item__(self, pdb, fp):
 
         # parse protein structure
         p, c = pdb.split('.')           # pdb ID and chain ID
         ProtProcess.download_pdb(p, f'{data_dir}/pdb/{p}.pdb')
-        structure = self.parser.get_structure('a', f'{data_dir}/pdb/{p}.pdb')
-        chain = structure[0][c]
+        flag = True
+        while(flag):
+            # generate node features
+            try:
+                structure = self.parser.get_structure('a', f'{data_dir}/pdb/{p}.pdb')
+                chain = structure[0][c]
+                res, x = ProtProcess.get_residue_feature(chain)
+                num_residues = res.shape[0]
 
-        # generate node features
-        try:
-            res, x = ProtProcess.get_residue_feature(chain)
-        except:
-            print('error pdb: ', pdb)
-        num_residues = res.shape[0]
+                # assert num_residues == 0
+                flag = False
+            except Error as err:
+                print('error: ', err)
+                print('error pdb: ', pdb)
+                ProtProcess.download_pdb(p, f'{data_dir}/pdb/{p}.pdb', replace=True)
+
         res = self.to_one_hot(res, len(residue2idx))[...,None]
 
         # augmentation on the coordinates(
@@ -303,12 +329,24 @@ class ProtFunctDatasetMultiClass(Dataset):
         # add edge feature
         G.edata['d'] = x[dst] - x[src]
         G.edata['w'] = torch.Tensor(w)
+
+        save_graphs(fp, G)
     
         return G
 
+    # @profile
     def __getitem__(self, idx):
         pdb, y = self.inputs[idx], self.targets[idx]
-        G = self.__prepare_item__(pdb)
+        # print(data_dir)
+        fp = f"{self.cache_dir}{pdb}.bin"
+        # os.path.join(data_dir, 'graph', '-'.join(self.dis_cut), f'{pdb}.bin')
+        if os.path.exists(fp):
+            G, _ = load_graphs(fp)
+            G = G[0]
+        else:
+            G = self.__prepare_item__(pdb, fp)
+
+        G.readonly()
     
         return G, y, pdb
 
@@ -485,7 +523,7 @@ class ProtFunctDatasetBinary(Dataset):
             w.append(bond)
 
         return np.array(src).astype(IDTYPE), np.array(dst).astype(IDTYPE), np.array(w)
-  
+
 
 def collate(samples): 
     graphs, y, pdb = map(list, zip(*samples))
@@ -503,14 +541,23 @@ def to_np(x):
 #%%
 # test
 if __name__ == '__main__':
-    try:
-        for mode in ['train', 'test', 'valid']:
-            dataset = ProtFunctDatasetBinary('../data/ProtFunct.pt', mode='test', class_idx=0)
-            dataloader = DataLoader(dataset, batch_size=2, shuffle=False, collate_fn=collate_ns)
+    # try:
+    #     for mode in ['train', 'test', 'valid']:
+    #         dataset = ProtFunctDatasetBinary('../data/ProtFunct.pt', mode='test', class_idx=0)
+    #         dataloader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=collate_ns)
 
-            for i, data in enumerate(dataloader):
-                print(f'{i}')
-    finally:
-        torch.save(residue2idx, 'res2idx_dict_tmp.pt')
-        # torch.save(residue2count, 'res2count_dict.pt')
+    #         for i, data in enumerate(dataloader):
+    #             print(f'{i}')
+    # finally:
+    #     torch.save(residue2idx, 'res2idx_dict_tmp.pt')
+    #     # torch.save(residue2count, 'res2count_dict.pt')
 
+    for mode in ['train', 'test', 'valid']:
+        dataset = ProtFunctDataset('../data/ProtFunct.pt', mode=mode)
+        dataloader = DataLoader(dataset, batch_size=1, shuffle=False, )
+        
+        for i, data in enumerate(dataloader):
+            if not i % 1000:
+                print(i)
+            continue
+            # print(f'{mode}: {i}')

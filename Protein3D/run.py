@@ -1,72 +1,147 @@
 #%%
 import os
-os.chdir('/home/flower/github/Protein3D/Protein3D')
-
-from equivariant_attention.utils_profiling import *
-from dgl.data.utils import save_graphs
-import math
-from torch import nn, optim
-from torch.nn import functional as F
-
+from torch.cuda import max_memory_allocated
+from torch.nn.functional import softmax
+os.chdir('/global/home/hpc4590/github/Protein3D/Protein3D')
 from models import *
 
-import pytorch_lightning as pl
-from pytorch_lightning.metrics import functional as FM
-from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.loggers import TensorBoardLogger
-
-
-# *** load experimental settings ***
-setting = ExpSetting(log_file='log')    
-
-# sets seeds for numpy, torch, python.random and PYTHONHASHSEED
-pl.seed_everything(setting.seed, workers=True)
-
-# *** init model ***
-# # -------- using binary classifier -------- 
-# model = ProtBinary(setting, pred_class_binary=3)
-# -------- using multi-label classifier -------- 
-model = ProtMultClass(setting)
-
-# continue training
-# model = ProtMultClass.load_from_checkpoint(setting=setting, checkpoint_path='/home/flower/github/Protein3D/Protein3D/save/epoch=09-train_l1_loss=2348.64.ckpt')
-
-# saves a file like: my/path/sample-mnist-epoch=02-val_loss=0.32.ckpt
-checkpoint_callback = ModelCheckpoint(
-    monitor='train_l1_loss',
-    dirpath='save/',
-    filename='{epoch:02d}-{train_l1_loss:.2f}',
-    save_top_k=5,
-    mode='min',
-)
-
-logger = TensorBoardLogger("lightning_logs", name="test1", log_graph=True)
-# trainer = pl.Trainer(max_epochs=3, logger=logger, callbacks=[checkpoint_callback]) 
-trainer = pl.Trainer(gpus=1, max_epochs=100, logger=logger, callbacks=[checkpoint_callback]) 		# if you have GPUs
-trainer.fit(model)
-# trainer.validate(model, model.validation_dataloader())
-# trainer.validate(model)
-# t = trainer.test(model)
-
-# %%
-# test block
-
-# for i, data in enumerate(train_loader):
-# 	print(i)
 
 #%%
-# g, y_org, pdb = data
-# y1 = model.model[0](g)
-# y2 = model.model[1](y1)
-# pred = model.model[2](y2)
+def seed_all(seed):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+# @profile
+# def main():
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+setting = ExpSetting(
+    distance_cutoff=[3, 3.5], 
+    num_layers=2,
+    atom_feature_size=20,
+    num_degrees=3, 
+    seed=1111,
+    num_channels=4, 
+    head=1, 
+    # use_classes = [357, 351, 23, 215, 190, 162, 62, 195, 321, 369],
+    # use_classes = list(range(50)),
+    # use_classes = [357, 351, 23, 215, 190],
+    use_classes = [162, 62, 195, 321, 369],
+    batch_size=16,
+    decoder_mid_dim=64,
+    lr=1e-3
+    )
+max_epoch = 20
+
+seed_all(setting.seed)
+
+model = ProtMultClassModel(setting)
+model.to(device)
+
+train_loader, valid_loader, test_loader = load_data(setting)
+
+optimizer = torch.optim.Adam(model.parameters(), setting.lr)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, setting.num_epochs, eta_min=1e-4)
+
+c_recaster = get_class_recaster(setting.use_classes)
+loss_fn = torch.nn.CrossEntropyLoss()
+acc_fn = tm.Accuracy(num_classes=setting.num_class)
 
 
-# # y_org = torch.tensor([1, 4])
-# y = F.one_hot(y_org, num_classes=pred.shape[1])
+for e in range(max_epoch):
 
-# pos_pred = pred * y
+    for i, batch in enumerate(train_loader):
 
-# l1_loss = torch.sum(torch.abs(pred - y))  + torch.sum(torch.abs(pos_pred - y)) * pred.shape[1]
-# l2_loss = torch.sum((pred - y)**2) + torch.sum((pos_pred - y)**2) * pred.shape[1]
+        # if i < 420:
+        #     continue
 
+        g, targets, pdb = batch
+        g = g.to(device)
+        targets = c_recaster(targets).to(device)
+
+        model.train()
+        optimizer.zero_grad()
+
+        z = model(g)
+        loss = loss_fn(z, targets)
+
+
+        loss.backward()
+
+        optimizer.step()
+        scheduler.step()
+
+
+        # if i % 400 == 0:
+    model.eval()
+    p_list = []
+    target_list = []
+    
+    for loader in [valid_loader, test_loader]:
+        p_list = []
+        pdb_list = []
+        target_list = []
+        for batch in loader:
+            g, targets, pdb = batch
+            g = g.to(device)
+            targets = c_recaster(targets).to(device)
+            pre_p = model(g)
+            p_list.append(pre_p)
+            target_list.append(targets)
+            pdb_list.append(pdb)
+        pdb_list = np.concatenate(pdb_list)
+        pre_ps = torch.cat(p_list)
+        preds = torch.argmax(pre_ps, dim=1)
+        ts = torch.cat(target_list)
+        loss = loss_fn(pre_ps, ts)
+        loss_num = loss.detach().tolist()
+        acc = acc_fn(preds, ts)
+        auroc_fn = tm.AUROC(num_classes=len(setting.use_classes))
+        auroc = auroc_fn(pre_ps, ts)
+
+        print(f"{e}, {i}, loss:{loss:.4}, acc: {acc:.4}, auroc: {auroc:.4}")
+        
+
+# main()
+
+
+#%%
+acc_fn2 = tm.Accuracy(top_k=2)
+acc2 = acc_fn2(pre_ps, ts)
+
+
+
+#%%
+name = f"ec{len(setting.use_classes)}_batch{setting.batch_size}_nl{setting.num_layers}_nd{setting.num_degrees}_nc{setting.num_channels}_dd{setting.decoder_mid_dim}"
+torch.save(model, f"../model/{name}.pt")
+
+
+#%%
+# -------------- analysis --------------
+import pandas as pd
+ecs = pd.read_csv('../data/ProtFunct/unique_functions.txt', header=None).to_numpy().flatten()
+re = []
+for i in range(len(setting.use_classes)):
+    pi = preds[ts == i]
+    acc = torch.sum(pi==i).type(torch.DoubleTensor) / pi.shape[0]
+    ppi = pre_ps[ts == i]
+    acc2 = acc_fn2(ppi, ts[ts == i])
+    re.append([i, ecs[setting.use_classes[i]], pi.shape[0], acc.item(), acc2.item()])
+print(re)
+df = pd.DataFrame(re, columns=['ec_index', 'ec_class', '#testing sample', 'accuracy', 'acc_top_2'])
+
+m = nn.Softmax(dim=1)
+a = m(pre_ps).cpu().detach().numpy()
+t = ts.cpu().detach().numpy()
+b = np.concatenate([pdb_list.reshape((-1, 1)), t.reshape((-1, 1)), a], axis=1)
+
+df_pred_full = pd.DataFrame(b, columns=['PDB', 'EC_idx']+[f'idx-{i}: {j}' for i, j in enumerate(df.ec_class.tolist())])
+df_pred_full.to_csv('top5_indiv_pred.csv')
+
+
+# for parameter in model.parameters():
+#     print(parameter)
+
+model = torch.load(f"../model/{name}.pt")
 # %%

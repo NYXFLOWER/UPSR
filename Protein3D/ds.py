@@ -18,7 +18,7 @@ os.path.abspath('.')
 DTYPE = np.float32
 IDTYPE = np.int32
 
-data_dir = '/home/flower/projects/def-laurence/flower'
+data_dir = '/global/home/hpc4590/share/protein'
 # data_dir = '../data'
 residue2idx = torch.load('../data/res2idx_dict_core.pt')
 # residue2count = torch.load('../data/res2count_dict.pt')
@@ -52,7 +52,7 @@ class ProtProcess:
             if outfile:
                 with open(outfile, 'w') as f:
                     f.write(response)
-                print('downloaded')
+                # print('downloaded')
             return 1
         else:
             return 0
@@ -154,8 +154,12 @@ class ProtFunctDataset(Dataset):
         # parse protein structure
         p, c = pdb.split('.')           # pdb ID and chain ID
         ProtProcess.download_pdb(p, f'{data_dir}/pdb/{p}.pdb')
-        # structure = self.parser.get_structure('a', f'{data_dir}/pdb/{p}.pdb')
-        # chain = structure[0][c]
+        structure = self.parser.get_structure('a', f'{data_dir}/pdb/{p}.pdb')
+
+        try:
+            chain = structure[0][c]
+        except:
+            print(f"no structure -- {pdb}, index={idx}")
 
         # # generate node features
         # try:
@@ -231,7 +235,7 @@ def to_np(x):
 # test
 if __name__ == '__main__':
     try:
-        for mode in ['valid', 'test', 'train']:
+        for mode in ['train', 'test', 'valid']:
             dataset = ProtFunctDataset('../data/ProtFunct.pt', mode=mode)
             dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
             
