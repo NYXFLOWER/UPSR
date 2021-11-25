@@ -7,7 +7,7 @@ import dgl
 import torch
 import numpy as np
 
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 from Bio.PDB import PDBParser
 from Bio.PDB.NeighborSearch import NeighborSearch
 from dgl.data.utils import save_graphs, load_graphs
@@ -21,10 +21,13 @@ os.path.abspath('.')
 DTYPE = np.float32
 IDTYPE = np.int32
 
-data_dir = "/global/home/hpc4590/share/protein"
+# data_dir = "/global/home/hpc4590/share/protein"
 # data_dir = '../data'
+data_dir = "/home/flower/projects/def-laurence/flower"
 residue2idx = torch.load('../data/res2idx_dict_core.pt')
 # residue2count = torch.load('../data/res2count_dict.pt')
+
+
 
 #%%
 # def blockPrinting(func):
@@ -112,125 +115,7 @@ class RandomRotation(object):
         Q, __ = np.linalg.qr(M)
         return x @ Q
 
-#%%
-class ProtFunctDataset(Dataset):
-    atom_feature_size = len(residue2idx)
 
-    def __init__(self, file_path, mode: str='train', if_transform: bool=True, dis_cut: list=[3.0, 3.5]):
-        """Create a dataset object
-
-        Args:
-            file_path (str): path to data
-            mode (str, optional): {train/test/valid}. Defaults to 'train'.
-            if_transform (bool, optional): if applying data augmentation function. Defaults to True.
-        """
-        self.file_path = file_path
-        self.mode = mode
-
-        self.dis_cut = dis_cut
-        self.num_bonds = len(dis_cut) + 1
-        self.bond2idx = {'covalent':0, 'neighbor<{dis_cut[0]}':1, 'neighbor<{dis_cut[1]}': 2}
-
-        self.transform = RandomRotation() if if_transform else None
-        
-        self.__load_data()
-        self.len = len(self.targets)
-
-    def __load_data(self):
-        """Load preprocessed dataset and parser for input protein structure."""
-        data = torch.load(self.file_path)[self.mode]
-        # s, e = 100, 500
-        n = 0
-        # if self.mode == 'train':
-        #     n = 1868*8 + 3588*4
-        self.inputs = data['input_list'][n:]             # TODO: remove
-        self.targets = data['target_list'][n:]
-
-        self.parser = PDBParser()
-
-    def __len__(self):
-        return self.len
-
-    def to_one_hot(self, data, num_classes):
-        one_hot = np.zeros(list(data.shape) + [num_classes])
-        one_hot[np.arange(len(data)),data] = 1
-        return one_hot
-
-    def __getitem__(self, idx):
-        pdb, y = self.inputs[idx], self.targets[idx]
-
-        # parse protein structure
-        p, c = pdb.split('.')           # pdb ID and chain ID
-        ProtProcess.download_pdb(p, f'{data_dir}/pdb/{p}.pdb')
-        structure = self.parser.get_structure('a', f'{data_dir}/pdb/{p}.pdb')
-
-        # generate node features
-        try:
-            chain = structure[0][c]
-            res, x = ProtProcess.get_residue_feature(chain)
-        except Error as err:
-            print('error: ', err)
-            print('error pdb: ', pdb)
-            ProtProcess.download_pdb(p, f'{data_dir}/pdb/{p}.pdb', replace=True)
-
-        num_residues = res.shape[0]
-        res = self.to_one_hot(res, len(residue2idx))[...,None]
-
-        # augmentation on the coordinates(
-        if self.transform:
-            x = self.transform(x).astype(DTYPE)
-
-        # generate edge features
-        src, dst, w = self.__connect_partially([i for i in chain.get_atoms()], num_residues)
-        w = self.to_one_hot(w, self.num_bonds).astype(DTYPE)
-
-        # create protein representation graph
-        G = dgl.DGLGraph((src, dst))
-        # add node feature
-        x = torch.Tensor(x)
-        G.ndata['x'] = x
-        G.ndata['f'] = torch.Tensor(res)
-        # add edge feature
-        G.edata['d'] = x[dst] - x[src]
-        G.edata['w'] = torch.Tensor(w)
-    
-        return G, y, pdb
-        # return torch.Tensor([0, 0])
-
-    def norm2units(self, x, denormalize=True, center=True):
-        # Convert from normalized to QM9 representation
-        if denormalize:
-            x = x * self.std
-            # Add the mean: not necessary for error computations
-            if not center:
-                x += self.mean
-        # x = self.unit_conversion[self.task] * x
-        return x
-
-
-    def __connect_partially(self, atom_list, num_residues):
-        # initialize edges satisfy the different distance cutoffs
-        adjacency = {}
-        for c in range(1, self.num_bonds):
-            for i, j in ProtProcess.get_edge_set(self.dis_cut[-c], num_residues, atom_list):
-                adjacency[(i, j)] = self.num_bonds - c
-                adjacency[(j, i)] = self.num_bonds - c
-        
-        # add covalent bonds
-        for i in range(1, num_residues):
-            adjacency[(i-1, i)] = 0
-            adjacency[(i, i-1)] = 0
-
-        # convert to numpy arrays
-        src, dst, w = [], [], []
-        for edge, bond in adjacency.items():
-            src.append(edge[0])
-            dst.append(edge[1])
-            w.append(bond)
-
-        return np.array(src).astype(IDTYPE), np.array(dst).astype(IDTYPE), np.array(w)
-        
-#%%
 class ProtFunctDatasetMultiClass(Dataset):
     atom_feature_size = len(residue2idx)
 
@@ -250,14 +135,19 @@ class ProtFunctDatasetMultiClass(Dataset):
         self.bond2idx = {'covalent':0, 'neighbor<{dis_cut[0]}':1, 'neighbor<{dis_cut[1]}': 2}
 
         self.transform = RandomRotation() if if_transform else None
+
         self.use_classes = use_classes
+        self.get_class_recaster = {}
+        if use_classes:
+            for i, c in enumerate(use_classes):
+                self.get_class_recaster[c] = i
         
         self.__load_data()
         self.len = self.inputs.shape[0]
 
         self.cache_dir = f"{data_dir}/graph/{dis_cut[0]}-{dis_cut[1]}/"
         if not os.path.exists(self.cache_dir):
-            os.mkdir(self.cache_dir)
+            os.makedirs(self.cache_dir, )
 
         print(f'Data summary -> {len(use_classes) if use_classes else 384} protein classes, and {self.inputs.shape[0]} protein samples')
 
@@ -347,6 +237,9 @@ class ProtFunctDatasetMultiClass(Dataset):
             G = self.__prepare_item__(pdb, fp)
 
         G.readonly()
+
+        if self.use_classes:
+            y = self.get_class_recaster.get(y)
     
         return G, y, pdb
 
@@ -384,145 +277,145 @@ class ProtFunctDatasetMultiClass(Dataset):
         return np.array(src).astype(IDTYPE), np.array(dst).astype(IDTYPE), np.array(w)
     
 #%%
-class ProtFunctDatasetBinary(Dataset):
-    atom_feature_size = len(residue2idx)
+# class ProtFunctDatasetBinary(Dataset):
+#     atom_feature_size = len(residue2idx)
 
-    def __init__(self, file_path, mode: str='train', class_idx: int=1, if_transform: bool=True, dis_cut: list=[3.0, 3.5]):
-        """Create a dataset object
+#     def __init__(self, file_path, mode: str='train', class_idx: int=1, if_transform: bool=True, dis_cut: list=[3.0, 3.5]):
+#         """Create a dataset object
 
-        Args:
-            file_path (str): path to data
-            mode (str, optional): {train/test/valid}. Defaults to 'train'.
-            if_transform (bool, optional): if applying data augmentation function. Defaults to True.
-        """
-        self.file_path = file_path
-        self.mode = mode
-        self.class_idx = class_idx
-        print(f'Protein function index -> {class_idx}')
+#         Args:
+#             file_path (str): path to data
+#             mode (str, optional): {train/test/valid}. Defaults to 'train'.
+#             if_transform (bool, optional): if applying data augmentation function. Defaults to True.
+#         """
+#         self.file_path = file_path
+#         self.mode = mode
+#         self.class_idx = class_idx
+#         print(f'Protein function index -> {class_idx}')
 
-        self.dis_cut = dis_cut
-        self.num_bonds = len(dis_cut) + 1
-        self.bond2idx = {'covalent':0, 'neighbor<{dis_cut[0]}':1, 'neighbor<{dis_cut[1]}': 2}
+#         self.dis_cut = dis_cut
+#         self.num_bonds = len(dis_cut) + 1
+#         self.bond2idx = {'covalent':0, 'neighbor<{dis_cut[0]}':1, 'neighbor<{dis_cut[1]}': 2}
 
-        self.transform = RandomRotation() if if_transform else None
+#         self.transform = RandomRotation() if if_transform else None
         
-        self.__load_data()
-        self.len = self.inputs.shape[0]
+#         self.__load_data()
+#         self.len = self.inputs.shape[0]
 
-    def __load_data(self):
-        """Load preprocessed dataset and parser for input protein structure."""
-        # load data
-        data = torch.load(self.file_path)[self.mode]
-        inputs = np.array(data['input_list'])         
-        targets = np.array(data['target_list'])
+#     def __load_data(self):
+#         """Load preprocessed dataset and parser for input protein structure."""
+#         # load data
+#         data = torch.load(self.file_path)[self.mode]
+#         inputs = np.array(data['input_list'])         
+#         targets = np.array(data['target_list'])
 
-        # split positive and negative samples
-        mask = targets == self.class_idx
-        self.inputs = inputs[mask]
-        self.inputs_ns = inputs[~mask]
-        print(f'Data summary -> {self.inputs.shape[0]} positive and {self.inputs_ns.shape[0]} negative samples')
+#         # split positive and negative samples
+#         mask = targets == self.class_idx
+#         self.inputs = inputs[mask]
+#         self.inputs_ns = inputs[~mask]
+#         print(f'Data summary -> {self.inputs.shape[0]} positive and {self.inputs_ns.shape[0]} negative samples')
 
-        # initial negative sample list
-        self.__init_ns_list__()
+#         # initial negative sample list
+#         self.__init_ns_list__()
 
-        # initial PDB parser
-        self.parser = PDBParser()
+#         # initial PDB parser
+#         self.parser = PDBParser()
 
-    def __init_ns_list__(self):
-        ns = self.inputs_ns.copy()
-        np.random.shuffle(ns)
-        self.ns_list = ns.tolist()
+#     def __init_ns_list__(self):
+#         ns = self.inputs_ns.copy()
+#         np.random.shuffle(ns)
+#         self.ns_list = ns.tolist()
 
-    def __len__(self):
-        return self.len
+#     def __len__(self):
+#         return self.len
 
-    def to_one_hot(self, data, num_classes):
-        one_hot = np.zeros(list(data.shape) + [num_classes])
-        one_hot[np.arange(len(data)),data] = 1
-        return one_hot
+#     def to_one_hot(self, data, num_classes):
+#         one_hot = np.zeros(list(data.shape) + [num_classes])
+#         one_hot[np.arange(len(data)),data] = 1
+#         return one_hot
 
-    def __prepare_item__(self, pdb):
+#     def __prepare_item__(self, pdb):
 
-        # parse protein structure
-        p, c = pdb.split('.')           # pdb ID and chain ID
-        ProtProcess.download_pdb(p, f'{data_dir}/pdb/{p}.pdb')
-        structure = self.parser.get_structure('a', f'{data_dir}/pdb/{p}.pdb')
-        chain = structure[0][c]
+#         # parse protein structure
+#         p, c = pdb.split('.')           # pdb ID and chain ID
+#         ProtProcess.download_pdb(p, f'{data_dir}/pdb/{p}.pdb')
+#         structure = self.parser.get_structure('a', f'{data_dir}/pdb/{p}.pdb')
+#         chain = structure[0][c]
 
-        # generate node features
-        try:
-            res, x = ProtProcess.get_residue_feature(chain)
-        except:
-            print('error pdb: ', pdb)
-        num_residues = res.shape[0]
-        res = self.to_one_hot(res, len(residue2idx))[...,None]
+#         # generate node features
+#         try:
+#             res, x = ProtProcess.get_residue_feature(chain)
+#         except:
+#             print('error pdb: ', pdb)
+#         num_residues = res.shape[0]
+#         res = self.to_one_hot(res, len(residue2idx))[...,None]
 
-        # augmentation on the coordinates(
-        if self.transform:
-            x = self.transform(x).astype(DTYPE)
+#         # augmentation on the coordinates(
+#         if self.transform:
+#             x = self.transform(x).astype(DTYPE)
 
-        # generate edge features
-        src, dst, w = self.__connect_partially([i for i in chain.get_atoms()], num_residues)
-        w = self.to_one_hot(w, self.num_bonds).astype(DTYPE)
+#         # generate edge features
+#         src, dst, w = self.__connect_partially([i for i in chain.get_atoms()], num_residues)
+#         w = self.to_one_hot(w, self.num_bonds).astype(DTYPE)
 
-        # create protein representation graph
-        G = dgl.DGLGraph((src, dst))
-        # add node feature
-        x = torch.Tensor(x)
-        G.ndata['x'] = x
-        G.ndata['f'] = torch.Tensor(res)
-        # add edge feature
-        G.edata['d'] = x[dst] - x[src]
-        G.edata['w'] = torch.Tensor(w)
+#         # create protein representation graph
+#         G = dgl.DGLGraph((src, dst))
+#         # add node feature
+#         x = torch.Tensor(x)
+#         G.ndata['x'] = x
+#         G.ndata['f'] = torch.Tensor(res)
+#         # add edge feature
+#         G.edata['d'] = x[dst] - x[src]
+#         G.edata['w'] = torch.Tensor(w)
     
-        return G
+#         return G
 
-    def __getitem__(self, idx):
-        # positive sample
-        pdb = self.inputs[idx]
-        G = self.__prepare_item__(pdb)
+#     def __getitem__(self, idx):
+#         # positive sample
+#         pdb = self.inputs[idx]
+#         G = self.__prepare_item__(pdb)
 
-        # negative sample
-        if not len(self.ns_list):
-            self.__init_ns_list__()
-        pdb_ns = self.ns_list.pop()
-        G_ns = self.__prepare_item__(pdb_ns) 
+#         # negative sample
+#         if not len(self.ns_list):
+#             self.__init_ns_list__()
+#         pdb_ns = self.ns_list.pop()
+#         G_ns = self.__prepare_item__(pdb_ns) 
     
-        return G, 1, pdb, G_ns, 0, pdb_ns
-        # return torch.Tensor([0, 0])
+#         return G, 1, pdb, G_ns, 0, pdb_ns
+#         # return torch.Tensor([0, 0])
 
-    def norm2units(self, x, denormalize=True, center=True):
-        # Convert from normalized to QM9 representation
-        if denormalize:
-            x = x * self.std
-            # Add the mean: not necessary for error computations
-            if not center:
-                x += self.mean
-        # x = self.unit_conversion[self.task] * x
-        return x
+#     def norm2units(self, x, denormalize=True, center=True):
+#         # Convert from normalized to QM9 representation
+#         if denormalize:
+#             x = x * self.std
+#             # Add the mean: not necessary for error computations
+#             if not center:
+#                 x += self.mean
+#         # x = self.unit_conversion[self.task] * x
+#         return x
 
 
-    def __connect_partially(self, atom_list, num_residues):
-        # initialize edges satisfy the different distance cutoffs
-        adjacency = {}
-        for c in range(1, self.num_bonds):
-            for i, j in ProtProcess.get_edge_set(self.dis_cut[-c], num_residues, atom_list):
-                adjacency[(i, j)] = self.num_bonds - c
-                adjacency[(j, i)] = self.num_bonds - c
+#     def __connect_partially(self, atom_list, num_residues):
+#         # initialize edges satisfy the different distance cutoffs
+#         adjacency = {}
+#         for c in range(1, self.num_bonds):
+#             for i, j in ProtProcess.get_edge_set(self.dis_cut[-c], num_residues, atom_list):
+#                 adjacency[(i, j)] = self.num_bonds - c
+#                 adjacency[(j, i)] = self.num_bonds - c
         
-        # add covalent bonds
-        for i in range(1, num_residues):
-            adjacency[(i-1, i)] = 0
-            adjacency[(i, i-1)] = 0
+#         # add covalent bonds
+#         for i in range(1, num_residues):
+#             adjacency[(i-1, i)] = 0
+#             adjacency[(i, i-1)] = 0
 
-        # convert to numpy arrays
-        src, dst, w = [], [], []
-        for edge, bond in adjacency.items():
-            src.append(edge[0])
-            dst.append(edge[1])
-            w.append(bond)
+#         # convert to numpy arrays
+#         src, dst, w = [], [], []
+#         for edge, bond in adjacency.items():
+#             src.append(edge[0])
+#             dst.append(edge[1])
+#             w.append(bond)
 
-        return np.array(src).astype(IDTYPE), np.array(dst).astype(IDTYPE), np.array(w)
+#         return np.array(src).astype(IDTYPE), np.array(dst).astype(IDTYPE), np.array(w)
 
 
 def collate(samples): 
@@ -540,7 +433,7 @@ def to_np(x):
 
 #%%
 # test
-if __name__ == '__main__':
+# if __name__ == '__main__':
     # try:
     #     for mode in ['train', 'test', 'valid']:
     #         dataset = ProtFunctDatasetBinary('../data/ProtFunct.pt', mode='test', class_idx=0)
@@ -552,12 +445,12 @@ if __name__ == '__main__':
     #     torch.save(residue2idx, 'res2idx_dict_tmp.pt')
     #     # torch.save(residue2count, 'res2count_dict.pt')
 
-    for mode in ['train', 'test', 'valid']:
-        dataset = ProtFunctDataset('../data/ProtFunct.pt', mode=mode)
-        dataloader = DataLoader(dataset, batch_size=1, shuffle=False, )
+    # for mode in ['train', 'test', 'valid']:
+    #     dataset = ProtFunctDataset('../data/ProtFunct.pt', mode=mode)
+    #     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
         
-        for i, data in enumerate(dataloader):
-            if not i % 1000:
-                print(i)
-            continue
-            # print(f'{mode}: {i}')
+    #     for i, data in enumerate(dataloader):
+    #         if not i % 1000:
+    #             print(i)
+    #         continue
+    #         # print(f'{mode}: {i}')

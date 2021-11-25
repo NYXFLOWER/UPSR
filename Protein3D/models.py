@@ -5,11 +5,14 @@ from torch.nn import functional as F
 
 from equivariant_attention.modules import GConvSE3, GNormSE3, get_basis_and_r, GSE3Res, GMaxPooling, GAvgPooling
 from equivariant_attention.fibers import Fiber
+from datasets import *
 
-# import pytorch_lightning as pl
+import pytorch_lightning as pl
 import torchmetrics as tm
 
-from datasets import *
+
+
+# from pytorch_memlab import LineProfiler, MemReporter, profile, profile_every, set_target_gpu
 
 EPS = 1e-13
 
@@ -25,7 +28,7 @@ class ExpSetting(object):
     num_epochs=2, 
     num_workers=4, 
     num_layers=2, 
-    atom_feature_size=3, # SS
+    atom_feature_size=20, # SS
     num_degrees=3, 
     num_channels=20, 
     num_nlayers=0, 
@@ -59,7 +62,7 @@ class ExpSetting(object):
         self.decoder_mid_dim = decoder_mid_dim
 
         # self.num_class = num_class     # number of class in multi-class decoder
-        self.num_class = len(use_classes) # SS
+        self.num_class = len(use_classes) if use_classes else num_class # SS
         self.max_class_label = num_class
 
         self.use_classes = use_classes
@@ -68,7 +71,7 @@ class ExpSetting(object):
 
         self.n_bounds = len(distance_cutoff) + 1
         
-        self.device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')				 # Automatically choose GPU if available
+        # self.device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')				 # Automatically choose GPU if available
 
 
 class SE3TransformerEncoder(nn.Module):
@@ -93,9 +96,9 @@ class SE3TransformerEncoder(nn.Module):
         self.div = div
         self.pooling = pooling
         self.n_heads = n_heads
-        self.aa_embed = nn.Linear(atom_feature_size, num_channels) # SS
+        self.aa_embed = nn.Linear(atom_feature_size, num_channels) 
 
-        self.fibers = {'in': Fiber(1, self.num_channels), #SS
+        self.fibers = {'in': Fiber(1, self.num_channels),
                     'mid': Fiber(num_degrees, self.num_channels),
                     'out': Fiber(1, num_degrees*self.num_channels)}
 
@@ -107,8 +110,7 @@ class SE3TransformerEncoder(nn.Module):
         Gblock = []
         fin = fibers['in']
         for i in range(self.num_layers):
-            Gblock.append(GSE3Res(fin, fibers['mid'], edge_dim=self.edge_dim, 
-                                div=self.div, n_heads=self.n_heads))
+            Gblock.append(GSE3Res(fin, fibers['mid'], edge_dim=self.edge_dim, div=self.div, n_heads=self.n_heads))
             Gblock.append(GNormSE3(fibers['mid']))
             fin = fibers['mid']
         Gblock.append(GConvSE3(fibers['mid'], fibers['out'], self_interaction=True, edge_dim=self.edge_dim))
@@ -121,6 +123,7 @@ class SE3TransformerEncoder(nn.Module):
 
         return nn.ModuleList(Gblock)
     
+    # @profile
     def forward(self, G):
         # Compute equivariant weight basis from relative positions
         basis, r = get_basis_and_r(G, self.num_degrees-1)
@@ -170,17 +173,6 @@ class ProtMultClassModel(nn.Module):
         super().__init__()
         self.setting = setting
         self.model = self.__build_model()
-        self.class_dic = {}
-        i = 0
-        for c in self.setting.use_classes:
-            self.class_dic[c] = i
-            i += 1
-
-        self.loss_history = []
-
-    def class_recast(self, x):
-        y = torch.tensor([self.class_dic[i.tolist()] for i in x])
-        return y.cuda()
 
     def __build_model(self):
         model = []
@@ -208,12 +200,14 @@ class ProtMultClassModel(nn.Module):
 
         return nn.ModuleList(model)
 
+    # @profile
     def forward(self, g):
         """get model prediction"""
         prob = self._run_step(g)
 
         return prob
 
+    # @profile_every(1)
     def _run_step(self, g):
         """compute forward"""
         z = g
@@ -226,11 +220,11 @@ class ProtMultClassModel(nn.Module):
 
     #     return F.one_hot(y_list, num_classes=self.setting.num_class)
 
-    def __compute_epoch_metrics(self, mode):
-        outputs = self.metrics_dict[mode].compute()
-        self.metrics_dict[mode].reset()
+    # def __compute_epoch_metrics(self, mode):
+    #     outputs = self.metrics_dict[mode].compute()
+    #     self.metrics_dict[mode].reset()
 
-        return outputs
+    #     return outputs
 
     def forward(self, g, mode='train'):
                 
@@ -265,15 +259,50 @@ def load_data(setting):
     return tmp
 
 
-def get_class_recaster(use_classes):
-    dic = {}
-    for i, c in enumerate(use_classes):
-        dic[c] = i
-    
-    def tmp(x):
-        y = [dic[c.detach().tolist()] for c in x]
-        return torch.tensor(y)
-    
-    return tmp
+class ProtMultClassLitModel(pl.LightningModule):
+	def __init__(self, setting) -> None:
+		super().__init__()
+		self.setting = setting
+		self.model = ProtMultClassModel(setting)
+
+		self.loss_fn = torch.nn.CrossEntropyLoss()
+
+	def forward(self, g):
+		z = self.model(g)
+
+		return z
+
+	def step(self, batch, batch_idx):
+		g, targets, pdb = batch 	# dgl.batched_heterograph, torch.Tensor, list
+
+		z = self(g)
+		targets = targets.to(self.device)
+
+		loss = self.loss_fn(z, targets)
+
+		return loss	
+
+	def training_step(self, batch, batch_idx):
+		loss = self.step(batch, batch_idx)
+		self.log('train_loss', loss)
+
+		return loss
+
+	def validation_step(self, batch, batch_idx):
+		loss = self.step(batch, batch_idx)
+		self.log('valid_loss', loss)
+
+		return loss
+
+	def validation_epoch_end(self, outputs):
+		epoch_loss = torch.stack(outputs).mean()
+		self.log('valid_loss_epoch', epoch_loss)
+		# print(epoch_loss.item())
+
+	def configure_optimizers(self):
+		optimizer = torch.optim.Adam(self.model.parameters(), self.setting.lr)
+		scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, self.setting.num_epochs, eta_min=1e-4)
+
+		return [optimizer], [scheduler]
 
 
