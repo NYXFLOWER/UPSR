@@ -18,6 +18,7 @@ NUM_FUNC = 384
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 setting = ExpSetting(
+    data_address='../data/ProtFunct_dict.pt',
     distance_cutoff=[3, 3.5], 
     num_layers=2,
     atom_feature_size=20,

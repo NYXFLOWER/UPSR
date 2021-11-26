@@ -41,3 +41,9 @@ def get_class_recaster(use_classes):
         return y[0] if len(y) == 1 else torch.tensor(y)
     
     return tmp
+
+def to_np(x):
+    return x.cpu().detach().numpy()
+
+def to_num(x):
+    return x.cpu().item()

@@ -5,6 +5,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 import sys
 
 # setting = ExpSetting(
+    # data_address='../data/ProtFunct_dict.pt',
 #     distance_cutoff=[3, 3.5], 
 #     num_layers=int(sys.argv[1]),
 #     num_degrees=int(sys.argv[2]), 
@@ -19,6 +20,7 @@ import sys
 #     )
 
 setting = ExpSetting(
+    data_address='../data/ProtFunct_dict.pt',
     distance_cutoff=[3, 3.5], 
     num_layers=2,
     num_degrees=3, 

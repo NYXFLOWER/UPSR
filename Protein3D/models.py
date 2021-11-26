@@ -20,7 +20,7 @@ EPS = 1e-13
 class ExpSetting(object):
     def __init__(self, 
     distance_cutoff=[3, 3.5], 
-    data_address='../data/ProtFunct.pt', 
+    data_address='../data/ProtFunct_dict.pt', 
     log_file=None, 
     log_dir = 'log/', 
     batch_size=4, 
