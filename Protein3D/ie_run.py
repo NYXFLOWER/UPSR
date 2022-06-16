@@ -1,9 +1,11 @@
 #%%
-from utils import *
 import os
+os.chdir('/home/flower/github/Protein3D/Protein3D')
+
+from utils import *
 from torch.cuda import max_memory_allocated
 from torch.nn.functional import softmax
-os.chdir('/home/flower/github/Protein3D/Protein3D')
+
 from models import *
 # from pytorch_memlab import LineProfiler, MemReporter, profile, profile_every, set_target_gpu
 
@@ -30,11 +32,11 @@ setting = ExpSetting(
     # use_classes = list(range(NUM_FUNC)),
     use_classes = [357, 351, 0],
     # use_classes = [162, 62, 195, 321, 369],
-    batch_size=128,
+    batch_size=32,
     # decoder_mid_dim=64,
     lr=1e-3
     )
-max_epoch = 100
+max_epoch = 500
 
 seed_all(setting.seed)
 
@@ -60,7 +62,7 @@ acc_fn2 = tm.Accuracy(top_k=2).to(device)
 def main():
     for e in range(max_epoch):
 
-        for i, batch in enumerate(test_loader):
+        for i, batch in enumerate(valid_loader):
 
             # if i < 420:
             #     continue
@@ -97,14 +99,14 @@ def main():
                 break
 
 
-        #     # if i % 400 == 0:
-        # val_test(e, i, model)
+        if e % 50 == 0:
+            val_test(e, i, model)
         
 def val_test(e, i, model):
     model.eval()
     p_list = []
     target_list = []
-    for loader in [valid_loader, test_loader]:
+    for loader in [test_loader]:
         p_list = []
         pdb_list = []
         target_list = []
@@ -116,7 +118,7 @@ def val_test(e, i, model):
             p_list.append(pre_p)
             target_list.append(targets)
             pdb_list.append(pdb)
-        print('done')
+        # print('done')
 
         pdb_list = np.concatenate(pdb_list)
         pre_ps = torch.cat(p_list)
@@ -129,11 +131,12 @@ def val_test(e, i, model):
         auroc = auroc_fn(pre_ps, ts)
         acc2 = acc_fn2(pre_ps, ts)
 
-        print(f"{e:3}, {i:3}, loss:{loss:.4}, acc: {acc:.4}, acc_top2: {acc2:.4} auroc: {auroc:.4}")
+        print(f"{e:3} - {i:3}, loss:{loss:.4}, acc: {acc:.4}, acc_top2: {acc2:.4} auroc: {auroc:.4}")
         
 
 # try:
 main()
+
 # except:
 #     name = f"batch{setting.batch_size}_nl{setting.num_layers}_nd{setting.num_degrees}_nc{setting.num_channels}_dd{setting.decoder_mid_dim}"
 #     torch.save(model, f"../model/{name}.pt") 
